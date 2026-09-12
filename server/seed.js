@@ -1,0 +1,164 @@
+const bcrypt = require('bcrypt');
+const pool = require('./db');
+
+const DEFAULT_PASSWORD = 'Passw0rd!';
+
+async function reset(conn) {
+  await conn.query('SET FOREIGN_KEY_CHECKS = 0');
+  for (const table of ['Request_step', 'Leave_request', 'Exercise', 'Attendance', 'Employee', 'Org_unit']) {
+    await conn.query(`TRUNCATE TABLE ${table}`);
+  }
+  await conn.query('SET FOREIGN_KEY_CHECKS = 1');
+}
+
+async function seedOrgUnits(conn) {
+  const units = {};
+  const insertUnit = async (name, type, parentKey) => {
+    const parentId = parentKey ? units[parentKey] : null;
+    const [result] = await conn.query(
+      'INSERT INTO Org_unit (name, type, parent_unit_id) VALUES (?, ?, ?)',
+      [name, type, parentId]
+    );
+    units[name] = result.insertId;
+  };
+
+  await insertUnit('Direction Générale', 'direction', null);
+  await insertUnit('Département RH', 'department', 'Direction Générale');
+  await insertUnit('Département IT', 'department', 'Direction Générale');
+  await insertUnit('Section Recrutement', 'section', 'Département RH');
+  await insertUnit('Section Paie', 'section', 'Département RH');
+  await insertUnit('Section Dev', 'section', 'Département IT');
+  await insertUnit('Section Infra', 'section', 'Département IT');
+
+  return units;
+}
+
+async function seedEmployees(conn, units) {
+  const emp = {};
+  const hashedPw = await bcrypt.hash(DEFAULT_PASSWORD, 10);
+
+  // forward_drh = true only for department/direction level heads
+  // forward_drh = true only for department/direction level heads
+  const roster = [
+    { key: 'dg',       first: 'Karim',   last: 'Benali',     email: 'karim.benali@corp.dz',      role: 'head',     unit: 'Direction Générale',  drh: true,  date: '2015-01-12' },
+    { key: 'deptRH',   first: 'Amina',   last: 'Toumi',      email: 'amina.toumi@corp.dz',        role: 'head',     unit: 'Département RH',      drh: true,  date: '2016-03-01' },
+    { key: 'deptIT',   first: 'Yacine',  last: 'Merabet',    email: 'yacine.merabet@corp.dz',     role: 'head',     unit: 'Département IT',      drh: true,  date: '2016-06-20' },
+    { key: 'secRecru', first: 'Sofia',   last: 'Haddad',     email: 'sofia.haddad@corp.dz',       role: 'head',     unit: 'Section Recrutement', drh: false, date: '2018-02-15' },
+    { key: 'secPaie',  first: 'Riad',    last: 'Belkacem',   email: 'riad.belkacem@corp.dz',      role: 'head',     unit: 'Section Paie',        drh: false, date: '2018-04-10' },
+    { key: 'secDev',   first: 'Nadia',   last: 'Cherif',     email: 'nadia.cherif@corp.dz',       role: 'head',     unit: 'Section Dev',         drh: false, date: '2017-09-05' },
+    { key: 'secInfra', first: 'Farid',   last: 'Boumediene', email: 'farid.boumediene@corp.dz',   role: 'head',     unit: 'Section Infra',       drh: false, date: '2017-11-22' },
+    { key: 'hr',       first: 'Lina',    last: 'Zerrouki',   email: 'lina.zerrouki@corp.dz',      role: 'hr',       unit: 'Direction Générale',  drh: false, date: '2019-01-08' }, // moved up to direction level
+    { key: 'admin',    first: 'Yasmine', last: 'Kaci',       email: 'yasmine.kaci@corp.dz',       role: 'admin',    unit: 'Direction Générale',  drh: false, date: '2015-01-05' }, // new
+    { key: 'e1', first: 'Mounir',  last: 'Saidi',    email: 'mounir.saidi@corp.dz',    role: 'employee', unit: 'Section Recrutement', drh: false, date: '2021-03-01' },
+    { key: 'e2', first: 'Amel',    last: 'Bouzid',   email: 'amel.bouzid@corp.dz',     role: 'employee', unit: 'Section Recrutement', drh: false, date: '2022-05-14' },
+    { key: 'e3', first: 'Walid',   last: 'Ammar',    email: 'walid.ammar@corp.dz',     role: 'employee', unit: 'Section Paie',        drh: false, date: '2020-09-19' },
+    { key: 'e4', first: 'Nesrine', last: 'Kaddour',  email: 'nesrine.kaddour@corp.dz', role: 'employee', unit: 'Section Paie',        drh: false, date: '2021-11-02' },
+    { key: 'e5', first: 'Hicham',  last: 'Bendaoud', email: 'hicham.bendaoud@corp.dz', role: 'employee', unit: 'Section Dev',         drh: false, date: '2020-06-23' },
+    { key: 'e6', first: 'Sarah',   last: 'Ouali',    email: 'sarah.ouali@corp.dz',     role: 'employee', unit: 'Section Dev',         drh: false, date: '2022-01-17' },
+    { key: 'e7', first: 'Bilal',   last: 'Rahmani',  email: 'bilal.rahmani@corp.dz',   role: 'employee', unit: 'Section Infra',       drh: false, date: '2021-08-09' },
+  ];
+
+  for (const p of roster) {
+    const [result] = await conn.query(
+      `INSERT INTO Employee (First_name, Last_name, email, password, recrutement_date, role, unit_id, forward_drh)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.first, p.last, p.email, hashedPw, p.date, p.role, units[p.unit], p.drh]
+    );
+    emp[p.key] = result.insertId;
+  }
+
+  return emp;
+}
+
+async function seedExercise(conn, emp) {
+  for (const key of Object.keys(emp)) {
+    await conn.query('INSERT INTO Exercise (Emp_id, exercise, balance) VALUES (?, ?, ?)', [emp[key], '2025', 6.5]);
+    await conn.query('INSERT INTO Exercise (Emp_id, exercise, balance) VALUES (?, ?, ?)', [emp[key], '2026', 30.0]);
+  }
+}
+
+async function seedAttendance(conn, emp) {
+  const days = 10;
+  const today = new Date();
+  for (const key of Object.keys(emp)) {
+    for (let i = 0; i < days; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().slice(0, 10);
+      const attend = !(key === 'e5' && i === 2) && !(key === 'e3' && i === 5);
+      await conn.query('INSERT INTO Attendance (Emp_id, attendance_date, attend) VALUES (?, ?, ?)', [emp[key], dateStr, attend]);
+    }
+  }
+}
+
+async function seedLeaveRequestsAndSteps(conn, emp) {
+  const requests = [
+    { key: 'r1', emp: 'e1', exercise: '2026', type: 'annual',      start: '2026-10-05', duration: 5,  status: 'pending' },
+    { key: 'r2', emp: 'e2', exercise: '2026', type: 'annual',      start: '2026-09-20', duration: 3,  status: 'approved' },
+    { key: 'r3', emp: 'e3', exercise: '2026', type: 'exceptional', start: '2026-09-15', duration: 2,  status: 'rejected', reason: 'family_event', justification: 'Family emergency' },
+    { key: 'r4', emp: 'e4', exercise: '2025', type: 'advance',     start: '2026-11-01', duration: 4,  status: 'pending' },
+    { key: 'r5', emp: 'e5', exercise: '2026', type: 'annual',      start: '2026-12-10', duration: 7,  status: 'cancelled' },
+    { key: 'r6', emp: 'e6', exercise: '2026', type: 'annual',      start: '2026-09-01', duration: 10, status: 'approved' },
+    { key: 'r7', emp: 'e7', exercise: '2026', type: 'exceptional', start: '2026-09-22', duration: 1,  status: 'pending', reason: 'medical', justification: 'Doctor appointment' },
+  ];
+
+  const requestIds = {};
+  for (const r of requests) {
+    const [result] = await conn.query(
+      `INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, request_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [emp[r.emp], r.exercise, r.type, r.start, r.duration, r.reason || null, r.justification || null, r.status]
+    );
+    requestIds[r.key] = result.insertId;
+  }
+
+  // Chains: unit head, then optionally forwarded further, HR only when a forward_drh head chooses to
+  const steps = [
+    ['r1', [['secRecru', null, null, null]]],
+    ['r2', [['secRecru', 'approved', '2026-09-18 09:00:00', 'OK'], ['hr', 'approved', '2026-09-18 14:00:00', 'Validated by HR']]],
+    ['r3', [['secPaie', 'rejected', '2026-09-14 11:00:00', 'Insufficient notice']]],
+    ['r4', [['secPaie', 'approved', '2026-10-25 10:00:00', 'Forwarded up'], ['deptRH', null, null, null]]],
+    ['r5', [['secDev', 'approved', '2026-11-20 10:00:00', 'Approved then cancelled by employee']]],
+    ['r6', [['secDev', 'approved', '2026-08-25 09:00:00', 'OK'], ['hr', 'approved', '2026-08-26 10:00:00', 'Validated by HR']]],
+    ['r7', [['secInfra', null, null, null]]],
+  ];
+
+  for (const [reqKey, chain] of steps) {
+    let order = 1;
+    for (const [targetKey, decision, decidedAt, comment] of chain) {
+      await conn.query(
+        `INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [requestIds[reqKey], order, emp[targetKey], decision, comment, decidedAt]
+      );
+      order++;
+    }
+  }
+}
+
+async function seed() {
+  const conn = await pool.getConnection();
+  try {
+    console.log('Resetting tables...');
+    await reset(conn);
+    console.log('Seeding org units...');
+    const units = await seedOrgUnits(conn);
+    console.log('Seeding employees...');
+    const emp = await seedEmployees(conn, units);
+    console.log('Seeding exercise balances...');
+    await seedExercise(conn, emp);
+    console.log('Seeding attendance...');
+    await seedAttendance(conn, emp);
+    console.log('Seeding leave requests + steps...');
+    await seedLeaveRequestsAndSteps(conn, emp);
+    console.log('Seed complete');
+    console.log(`Login for any seeded user: <email> / ${DEFAULT_PASSWORD}`);
+  } catch (err) {
+    console.error('Seed failed:', err);
+  } finally {
+    conn.release();
+    process.exit();
+  }
+}
+
+seed();
