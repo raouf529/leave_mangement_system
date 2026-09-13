@@ -130,6 +130,9 @@ function Dashboard() {
     (ex) => Number(ex.balance) > 0
   );
   const leaveRequests = employeeInfo?.leaveRequests ?? [];
+  const annualSplitRequests = leaveRequests.filter(
+    (lr) => lr.leaveType === 'annual' && (lr.status === 'pending' || lr.status === 'approved')
+  );
 
   return (
     <div
@@ -203,6 +206,44 @@ function Dashboard() {
               )}
             </div>
 
+            <div className="bg-white shadow rounded-4 p-4 p-md-5 mb-4">
+              <h2 className="h5 fw-bold mb-4">Répartition du congé annuel</h2>
+              {annualSplitRequests.length === 0 ? (
+                <p className="text-muted mb-0">
+                  Aucune demande annuelle active pour afficher une répartition.
+                </p>
+              ) : (
+                <div className="row g-3">
+                  {annualSplitRequests.map((request) => (
+                    <div key={request.id} className="col-12 col-lg-6">
+                      <div className="border rounded-4 p-3 h-100">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <strong>Demande du {formatDate(request.startDate)}</strong>
+                          <span className="badge rounded-pill bg-primary-subtle text-primary">
+                            {request.duration} j
+                          </span>
+                        </div>
+                        <p className="text-muted small mb-3">
+                          Répartition si la demande est acceptée :
+                        </p>
+                        {request.allocations && request.allocations.length > 0 ? (
+                          <div className="d-flex flex-wrap gap-2">
+                            {request.allocations.map((allocation, index) => (
+                              <span key={`${request.id}-${index}`} className="badge rounded-pill bg-light text-dark border px-3 py-2">
+                                Exercice {allocation.year} : {allocation.daysAllocated} j
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-muted mb-0 small">Aucune allocation enregistrée.</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Historique des demandes */}
             <div className="bg-white shadow rounded-4 p-4 p-md-5">
               <h2 className="h5 fw-bold mb-4">Historique des demandes</h2>
@@ -223,6 +264,18 @@ function Dashboard() {
                     <tbody>
                       {leaveRequests.map((lr) => {
                         const endDate = getEndDate(lr.startDate, lr.duration);
+                        const currentStepLabel = lr.currentStep
+                          ? lr.currentStep.kind === 'hr'
+                            ? 'HR'
+                            : lr.currentStep.kind === 'unit'
+                              ? `${lr.currentStep.unitName ?? 'Unité'} (${lr.currentStep.unitType ?? 'unit'})`
+                              : lr.currentStep.targetName
+                          : null;
+                        const rejectionNote = lr.status === 'rejected' ? (lr.rejectionReason || 'Aucune raison détaillée.') : null;
+                        const annualSplit = lr.leaveType === 'annual' && lr.allocations?.length
+                          ? lr.allocations.map((allocation) => `Exercice ${allocation.year} : ${allocation.daysAllocated} j`).join(' · ')
+                          : null;
+
                         return (
                           <tr key={lr.id}>
                             <td className="fw-medium">{LEAVE_TYPE_LABELS[lr.leaveType] ?? lr.leaveType}</td>
@@ -239,8 +292,19 @@ function Dashboard() {
                               </span>
                             </td>
                             <td>
+                              <div className="small text-muted">
+                                {annualSplit ? (
+                                  <div className="mb-1">Répartition : {annualSplit}</div>
+                                ) : null}
+                                {lr.status === 'pending' && currentStepLabel ? (
+                                  <div className="mb-1">Étape : {currentStepLabel}</div>
+                                ) : null}
+                                {rejectionNote ? (
+                                  <div className="text-danger">Motif : {rejectionNote}</div>
+                                ) : null}
+                              </div>
                               <button
-                                className="btn btn-outline-secondary btn-sm"
+                                className="btn btn-outline-secondary btn-sm mt-2"
                                 disabled={cancelingId === lr.id || lr.status === 'cancelled' || lr.status === 'rejected' || lr.status === 'approved'}
                                 onClick={() => handleCancelRequest(lr.id)}
                               >

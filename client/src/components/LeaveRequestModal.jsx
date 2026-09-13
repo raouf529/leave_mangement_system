@@ -53,6 +53,7 @@ function LeaveRequestModal({ onClose, onSuccess }) {
   const [endDate, setEndDate] = useState('');
   const [reasonType, setReasonType] = useState('medical');
   const [justification, setJustification] = useState('');
+  const [sendToDepartmentHead, setSendToDepartmentHead] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -88,7 +89,9 @@ function LeaveRequestModal({ onClose, onSuccess }) {
           duration,
           leaveType,
           reasonType: needsJustification ? reasonType : null,
-          justification: needsJustification ? justification.trim() : null
+          justification: needsJustification ? justification.trim() : null,
+          sendToDepartmentHead,
+          directToDepartmentHead: sendToDepartmentHead
         },
         { withCredentials: true }
       );
@@ -206,6 +209,19 @@ function LeaveRequestModal({ onClose, onSuccess }) {
                 />
               </div>
             )}
+
+            <div className="form-check mb-4">
+              <input
+                className="form-check-input"
+                type="checkbox"
+                id="sendToDepartmentHead"
+                checked={sendToDepartmentHead}
+                onChange={(e) => setSendToDepartmentHead(e.target.checked)}
+              />
+              <label className="form-check-label" htmlFor="sendToDepartmentHead">
+                Envoyer directement au responsable de département
+              </label>
+            </div>
 
             {error && (
               <div className="alert alert-danger py-2 small" role="alert">

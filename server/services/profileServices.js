@@ -25,6 +25,56 @@ const profileService = {
         const [exercises] = await pool.query('SELECT * FROM Exercise WHERE Emp_id = ?', [employeeId]);
         const [leaveRequests] = await pool.query('SELECT * FROM Leave_request WHERE Emp_id = ?', [employeeId]);
 
+        let requestAllocations = [];
+        let requestSteps = [];
+        if (leaveRequests.length > 0) {
+            [requestAllocations] = await pool.query(
+                `SELECT ra.request_id, ra.exercise_id, ra.days_allocated, e.year AS exercise_year
+                 FROM Request_exercise_allocation ra
+                 JOIN Exercise e ON e.exercise_id = ra.exercise_id
+                 WHERE ra.request_id IN (?)`,
+                [leaveRequests.map((request) => request.request_id)]
+            );
+
+            [requestSteps] = await pool.query(
+                `SELECT rs.request_id, rs.step_order, rs.target_id, rs.decision, rs.comment,
+                        e.First_name, e.Last_name, e.role AS target_role,
+                        u.name AS unit_name, u.type AS unit_type
+                 FROM Request_step rs
+                 JOIN Employee e ON e.Emp_id = rs.target_id
+                 LEFT JOIN Org_unit u ON u.unit_id = e.unit_id
+                 WHERE rs.request_id IN (?)
+                 ORDER BY rs.request_id, rs.step_order DESC`,
+                [leaveRequests.map((request) => request.request_id)]
+            );
+        }
+
+        const allocationsByRequest = requestAllocations.reduce((acc, allocation) => {
+            if (!acc[allocation.request_id]) {
+                acc[allocation.request_id] = [];
+            }
+
+            acc[allocation.request_id].push({
+                exerciseId: allocation.exercise_id,
+                year: allocation.exercise_year,
+                daysAllocated: Number(allocation.days_allocated)
+            });
+            return acc;
+        }, {});
+
+        const currentStepByRequest = {};
+        const rejectedStepByRequest = {};
+
+        for (const step of requestSteps) {
+            if (!currentStepByRequest[step.request_id] && (!step.decision || step.decision === '')) {
+                currentStepByRequest[step.request_id] = step;
+            }
+
+            if (!rejectedStepByRequest[step.request_id] && step.decision === 'rejected') {
+                rejectedStepByRequest[step.request_id] = step;
+            }
+        }
+
         return {
             id: rows[0].Emp_id,
             firstName: rows[0].First_name,
@@ -35,13 +85,37 @@ const profileService = {
             unit: units.length > 0 ? { id: units[0].unit_id, name: units[0].name, type: units[0].type } : null,
             forward_drh: rows[0].forward_drh,
             exercises: exercises.map(ex => ({ exercise: ex.year, balance: ex.balance })),
-            leaveRequests: leaveRequests.map(lr => ({
-                id: lr.request_id,
-                startDate: lr.start_date,
-                duration: lr.duration,
-                status: lr.request_status,
-                leaveType: lr.leave_type,
-            }))
+            leaveRequests: leaveRequests.map(lr => {
+                const currentStep = currentStepByRequest[lr.request_id];
+                const rejectedStep = rejectedStepByRequest[lr.request_id];
+                const currentStepLabel = currentStep
+                    ? currentStep.target_role === 'hr'
+                        ? 'HR'
+                        : currentStep.target_role === 'head'
+                            ? `${currentStep.unit_name ?? 'Unité'} (${currentStep.unit_type ?? 'unit'})`
+                            : `${currentStep.First_name ?? ''} ${currentStep.Last_name ?? ''}`.trim() || 'Responsable'
+                    : null;
+
+                return {
+                    id: lr.request_id,
+                    startDate: lr.start_date,
+                    duration: lr.duration,
+                    status: lr.request_status,
+                    leaveType: lr.leave_type,
+                    allocations: allocationsByRequest[lr.request_id] ?? [],
+                    currentStep: currentStep
+                        ? {
+                            stepOrder: currentStep.step_order,
+                            targetRole: currentStep.target_role,
+                            targetName: currentStepLabel,
+                            unitName: currentStep.unit_name,
+                            unitType: currentStep.unit_type,
+                            kind: currentStep.target_role === 'hr' ? 'hr' : currentStep.target_role === 'head' ? 'unit' : 'person'
+                          }
+                        : null,
+                    rejectionReason: rejectedStep?.comment ?? null
+                };
+            })
         };
     },
 

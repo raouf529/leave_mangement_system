@@ -131,6 +131,19 @@ function ApprovalInbox() {
                       <p className="text-muted small mb-3">Justification : {step.justification}</p>
                     )}
 
+                    {step.leave_type === 'annual' && step.annualSplit && step.annualSplit.length > 0 && (
+                      <div className="mb-3">
+                        <p className="small fw-medium text-muted mb-2">Répartition annuelle :</p>
+                        <div className="d-flex flex-wrap gap-2">
+                          {step.annualSplit.map((allocation, index) => (
+                            <span key={`${step.request_id}-${index}`} className="badge rounded-pill bg-primary-subtle text-primary border px-3 py-2">
+                              Exercice {allocation.year} : {allocation.daysAllocated} j
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="d-flex flex-wrap align-items-center gap-2 mt-3">
                       <input
                         type="text"

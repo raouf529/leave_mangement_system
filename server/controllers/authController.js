@@ -31,13 +31,33 @@ const authController = {
     async loginEmployee(req, res) {
         try {
             const { email, password } = req.body;
-            const { accessToken, refreshToken, role } = await authService.loginEmployee({ email, password });
+            const { accessToken, refreshToken } = await authService.loginEmployee({ email, password });
 
             res.cookie('accessToken', accessToken, ACCESS_COOKIE_OPTS);
             res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTS);
 
-            // role is not secret, fine to hand back for UI purposes (e.g. redirect logic)
-            res.status(200).json({ role });
+            res.status(200).json({ message: 'Login successful' });
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
+
+    async getCurrentUser(req, res) {
+        try {
+            const userId = req.user?.id;
+            if (!userId) {
+                return res.status(401).json({ error: 'User not authenticated' });
+            }
+
+            const user = await authService.getEmployeeById(userId);
+            res.status(200).json({
+                id: user.Emp_id,
+                firstName: user.First_name,
+                lastName: user.Last_name,
+                email: user.email,
+                role: user.role,
+                unitId: user.unit_id,
+            });
         } catch (error) {
             res.status(400).json({ error: error.message });
         }

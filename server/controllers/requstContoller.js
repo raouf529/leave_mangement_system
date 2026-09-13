@@ -4,7 +4,7 @@ const requestController = {
     async createRequest(req, res) {
         try {
             const employeeId = req.user?.id ?? req.body.employeeId;
-            const { startDate, duration, leaveType, reasonType, justification, url } = req.body;
+            const { startDate, duration, leaveType, reasonType, justification, url, directToDepartmentHead, sendToDepartmentHead } = req.body;
 
             if (!employeeId || !startDate || !duration || !leaveType) {
                 return res.status(400).json({ error: 'Missing required request fields' });
@@ -18,6 +18,8 @@ const requestController = {
                 reasonType,
                 justification,
                 url,
+                directToDepartmentHead: Boolean(directToDepartmentHead || sendToDepartmentHead),
+                sendToDepartmentHead: Boolean(directToDepartmentHead || sendToDepartmentHead),
             });
 
             res.status(201).json({ message: 'Leave request created successfully', requestId });
