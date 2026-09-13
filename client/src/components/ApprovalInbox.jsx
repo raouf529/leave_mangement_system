@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Header from './header';
+import useCurrentUser from '../hooks/useCurrentUser';
 
 function getMySteps() {
   return axios.get('http://localhost:5000/api/request/steps/me', { withCredentials: true });
@@ -38,6 +39,7 @@ function ApprovalInbox() {
   const [error, setError] = useState('');
   const [actioningStepId, setActioningStepId] = useState(null);
   const [rejectComment, setRejectComment] = useState({});
+  const { role: currentRole, loading: currentUserLoading } = useCurrentUser();
 
   async function fetchSteps() {
     setLoading(true);
@@ -53,8 +55,19 @@ function ApprovalInbox() {
   }
 
   useEffect(() => {
-    fetchSteps();
-  }, []);
+    if (currentUserLoading) {
+      return;
+    }
+
+    if (currentRole === 'head' || currentRole === 'hr') {
+      fetchSteps();
+      return;
+    }
+
+    setSteps([]);
+    setLoading(false);
+    setError('Accès réservé aux responsables.');
+  }, [currentRole, currentUserLoading]);
 
   async function handleApprove(stepId) {
     setActioningStepId(stepId);

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 
 const LEAVE_TYPES = [
@@ -46,6 +46,12 @@ function isvalidDate(startDateValue, endDateValue) {
 
   return true;
 }
+async function getInformation() {
+  const response = await axios.get('http://localhost:5000/api/profile/me', {
+    withCredentials: true
+  });
+  return response.data;
+}
 
 function LeaveRequestModal({ onClose, onSuccess }) {
   const [leaveType, setLeaveType] = useState('annual');
@@ -56,9 +62,35 @@ function LeaveRequestModal({ onClose, onSuccess }) {
   const [sendToDepartmentHead, setSendToDepartmentHead] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getInformation()
+      .then((user) => {
+        if (isMounted) setCurrentUser(user);
+      })
+      .catch(() => {
+        if (isMounted) setCurrentUser(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const duration = useMemo(() => diffInDays(startDate, endDate), [startDate, endDate]);
   const needsJustification = leaveType === 'exceptional';
+  const showDepartmentHeadOption =
+    currentUser?.role === 'employee' &&
+    ['service', 'section'].includes(currentUser?.unit?.type);
+
+  useEffect(() => {
+    if (!showDepartmentHeadOption) {
+      setSendToDepartmentHead(false);
+    }
+  }, [showDepartmentHeadOption]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -210,18 +242,20 @@ function LeaveRequestModal({ onClose, onSuccess }) {
               </div>
             )}
 
-            <div className="form-check mb-4">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id="sendToDepartmentHead"
-                checked={sendToDepartmentHead}
-                onChange={(e) => setSendToDepartmentHead(e.target.checked)}
-              />
-              <label className="form-check-label" htmlFor="sendToDepartmentHead">
-                Envoyer directement au responsable de département
-              </label>
-            </div>
+            {showDepartmentHeadOption && (
+              <div className="form-check mb-4">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="sendToDepartmentHead"
+                  checked={sendToDepartmentHead}
+                  onChange={(e) => setSendToDepartmentHead(e.target.checked)}
+                />
+                <label className="form-check-label" htmlFor="sendToDepartmentHead">
+                  Envoyer directement au responsable de département
+                </label>
+              </div>
+            )}
 
             {error && (
               <div className="alert alert-danger py-2 small" role="alert">

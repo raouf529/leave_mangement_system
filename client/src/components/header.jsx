@@ -1,8 +1,15 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
+import useCurrentUser from '../hooks/useCurrentUser';
 
 function Header({ EmployeeName, EmployeeRole }) {
   const [openMenu, setOpenMenu] = useState(false);
+  const location = useLocation();
+  const { fullName, role } = useCurrentUser();
+
+  const currentName = EmployeeName || fullName || '';
+  const currentRole = EmployeeRole || role || '';
+  const canSeeSupervisorLinks = ['head', 'hr'].includes(currentRole);
 
   return (
     <header className="bg-white shadow-sm">
@@ -35,14 +42,14 @@ function Header({ EmployeeName, EmployeeRole }) {
                     Profile
                   </Link>
                 </li>
-                { (EmployeeRole == 'head' || EmployeeRole == 'hr') && (
+                {canSeeSupervisorLinks && (
                   <li>
                     <Link className="d-block px-3 py-2 text-decoration-none text-dark" to="/unit-info" onClick={() => setOpenMenu(false)}>
                       mon equipe
                     </Link>
                   </li>
                 )}
-                { (EmployeeRole == 'head' || EmployeeRole == 'hr') && (
+                {canSeeSupervisorLinks && (
                   <li>
                     <Link className="d-block px-3 py-2 text-decoration-none text-dark" to="/approval-inbox" onClick={() => setOpenMenu(false)}>
                       Boîte de réception
@@ -70,8 +77,8 @@ function Header({ EmployeeName, EmployeeRole }) {
           </button>
 
           <div className="text-end d-none d-sm-block">
-            <p className="mb-0 fw-medium">{EmployeeName}</p>
-            <p className="mb-0 text-muted small">{EmployeeRole}</p>
+            <p className="mb-0 fw-medium">{currentName}</p>
+            <p className="mb-0 text-muted small">{currentRole}</p>
           </div>
         </div>
       </div>

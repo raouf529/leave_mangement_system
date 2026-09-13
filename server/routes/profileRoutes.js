@@ -5,9 +5,9 @@ const { authenticateToken } = require('../middleware/authMiddleware');
 const router = express.Router();
 
 router.get('/me', authenticateToken, profileController.getProfile);
+router.get('/me/underemployees', authenticateToken, profileController.getUnderemployees);
 router.get('/all', authenticateToken, profileController.getAllEmployees);
 router.get('/:id', authenticateToken, profileController.getProfile);
 router.put('/:id', authenticateToken, profileController.updateProfile);
-router.get('/me/underemployees', authenticateToken, profileController.getUnderemployees);
 
 module.exports = router;

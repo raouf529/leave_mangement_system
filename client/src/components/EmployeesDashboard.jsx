@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import Header from './header';
+import useCurrentUser from '../hooks/useCurrentUser';
 
 function getUnitInformation() {
   return axios.get('http://localhost:5000/api/profile/me/underemployees', {
@@ -52,10 +53,11 @@ function getEndDate(startDate, duration) {
   return d;
 }
 
-function EmployeesDashboard( {EmployeeRole} ) {
+function EmployeesDashboard() {
   const [employees, setEmployees] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState('');
+  const { role: currentRole, loading: currentUserLoading } = useCurrentUser();
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -64,11 +66,13 @@ function EmployeesDashboard( {EmployeeRole} ) {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const detailRequestRef = useRef(0);
   
   useEffect(() => {
     async function fetchList() {
       try {
         const response = await getUnitInformation();
+        console.log('Fetched employees:', response.data);
         setEmployees(response.data ?? []);
       } catch (err) {
         console.error('Error fetching employees:', err);
@@ -78,13 +82,17 @@ function EmployeesDashboard( {EmployeeRole} ) {
       }
     }
 
-    if (EmployeeRole === 'head' || EmployeeRole === 'hr') {
+    if (currentUserLoading) {
+      return;
+    }
+
+    if (currentRole === 'head' || currentRole === 'hr') {
       fetchList();
     } else {
       setLoadingList(false);
       setListError('Accès réservé aux responsables.');
     }
-  }, [EmployeeRole]);
+  }, [currentRole, currentUserLoading]);
 
   const filteredEmployees = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -98,18 +106,71 @@ function EmployeesDashboard( {EmployeeRole} ) {
   }, [employees, search, roleFilter]);
 
   async function handleViewDetails(id) {
+    const requestId = ++detailRequestRef.current;
+    const clickedEmployee = employees.find((emp) => Number(emp.id) === Number(id));
+
     setSelectedId(id);
-    setDetail(null);
+    setDetail(
+      clickedEmployee
+        ? {
+            ...clickedEmployee,
+            exercises: [],
+            leaveRequests: []
+          }
+        : null
+    );
     setDetailError('');
     setDetailLoading(true);
+
     try {
       const response = await getEmployeeInformation(id);
-      setDetail(response.data);
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
+
+      const fetchedEmployee = response?.data ?? null;
+      if (!fetchedEmployee) {
+        setDetail(clickedEmployee ?? null);
+        return;
+      }
+
+      setDetail({
+        ...fetchedEmployee,
+        id: fetchedEmployee.id ?? fetchedEmployee.Emp_id ?? id,
+        firstName: fetchedEmployee.firstName ?? fetchedEmployee.First_name ?? clickedEmployee?.firstName ?? '',
+        lastName: fetchedEmployee.lastName ?? fetchedEmployee.Last_name ?? clickedEmployee?.lastName ?? '',
+        email: fetchedEmployee.email ?? '',
+        recruitmentDate: fetchedEmployee.recrutement_date ?? fetchedEmployee.recruitment_date ?? null,
+        exercises: Array.isArray(fetchedEmployee.exercises)
+          ? fetchedEmployee.exercises.map((ex) => ({
+              exercise: ex.exercise ?? ex.year,
+              balance: ex.balance ?? ex.remainingDays ?? 0
+            }))
+          : [],
+        leaveRequests: Array.isArray(fetchedEmployee.leaveRequests)
+          ? fetchedEmployee.leaveRequests.map((request) => ({
+              ...request,
+              id: request.id ?? request.request_id,
+              startDate: request.startDate ?? request.start_date,
+              duration: request.duration ?? request.duration_days ?? 0,
+              status: request.status ?? request.request_status,
+              leaveType: request.leaveType ?? request.leave_type ?? request.type,
+              type: request.type ?? request.leaveType ?? request.leave_type,
+              allocations: Array.isArray(request.allocations) ? request.allocations : []
+            }))
+          : []
+      });
     } catch (err) {
       console.error('Error fetching employee details:', err);
+      if (requestId !== detailRequestRef.current) {
+        return;
+      }
+      setDetail(clickedEmployee ?? null);
       setDetailError("Impossible de charger les informations de cet employé.");
     } finally {
-      setDetailLoading(false);
+      if (requestId === detailRequestRef.current) {
+        setDetailLoading(false);
+      }
     }
   }
 
@@ -119,15 +180,36 @@ function EmployeesDashboard( {EmployeeRole} ) {
     setDetailError('');
   }
 
-  const activeExercises = (detail?.exercises ?? []).filter((ex) => Number(ex.balance) > 0);
-  const leaveRequests = detail?.leaveRequests ?? [];
+  const normalizedDetail = detail
+    ? {
+        ...detail,
+        exercises: Array.isArray(detail.exercises) ? detail.exercises : [],
+        leaveRequests: Array.isArray(detail.leaveRequests)
+          ? detail.leaveRequests.map((request) => ({
+              ...request,
+              id: request.id ?? request.request_id,
+              startDate: request.startDate ?? request.start_date,
+              duration: request.duration ?? request.duration_days ?? 0,
+              status: request.status ?? request.request_status,
+              leaveType: request.leaveType ?? request.leave_type ?? request.type,
+              type: request.type ?? request.leaveType ?? request.leave_type,
+              allocations: Array.isArray(request.allocations) ? request.allocations : [],
+              currentStep: request.currentStep ?? null,
+              rejectionReason: request.rejectionReason ?? request.rejection_reason ?? null
+            }))
+          : []
+      }
+    : null;
+
+  const activeExercises = (normalizedDetail?.exercises ?? []).filter((ex) => Number(ex.balance) > 0);
+  const leaveRequests = normalizedDetail?.leaveRequests ?? [];
 
   return (
     <div
       className="min-vh-100"
       style={{ background: 'linear-gradient(135deg, #eef2fb 0%, #f7f9fc 100%)' }}
     >
-      <Header EmployeeRole={EmployeeRole} />
+      <Header />
 
       <main className="container py-4 py-md-5">
         <div className="mb-4">
@@ -246,7 +328,7 @@ function EmployeesDashboard( {EmployeeRole} ) {
                   </div>
                   <div className="col-12 col-sm-6 col-md-4">
                     <p className="text-muted small mb-1">Date de recrutement</p>
-                    <p className="fw-medium mb-0">{formatDate(detail.recrutement_date)}</p>
+                    <p className="fw-medium mb-0">{formatDate(detail.recrutement_date ?? detail.recruitmentDate)}</p>
                   </div>
                 </div>
 
@@ -286,10 +368,11 @@ function EmployeesDashboard( {EmployeeRole} ) {
                       </thead>
                       <tbody>
                         {leaveRequests.map((lr) => {
+                          const leaveTypeKey = lr.leaveType ?? lr.type ?? lr.leave_type;
                           const endDate = getEndDate(lr.startDate, lr.duration);
                           return (
-                            <tr key={lr.id}>
-                              <td>{LEAVE_TYPE_LABELS[lr.type] ?? lr.type}</td>
+                            <tr key={lr.id ?? `${lr.startDate}-${lr.duration}`}>
+                              <td>{LEAVE_TYPE_LABELS[leaveTypeKey] ?? leaveTypeKey}</td>
                               <td>
                                 {formatDate(lr.startDate)}
                                 {endDate ? ` → ${formatDate(endDate)}` : ''}

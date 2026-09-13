@@ -16,13 +16,11 @@ function Login() {
     try {
       // withCredentials lets the browser accept/send the httpOnly cookies
       // the server sets — no tokens ever touch JS or localStorage.
-      const response = await axios.post(
+      await axios.post(
         'http://localhost:5000/api/auth/login',
         { email, password },
         { withCredentials: true }
       );
-      const { accessToken, role } = response.data;
-      sessionStorage.setItem('role', role);
       navigate('/dashboard');
     } catch (error) {
       setError('Email ou mot de passe incorrect');
