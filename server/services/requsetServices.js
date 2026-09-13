@@ -1,14 +1,19 @@
 const pool = require('../db');
 
+function getExerciseYearForDate(dateValue) {
+    const date = new Date(dateValue ?? Date.now());
+    const year = date.getFullYear();
+    return date.getMonth() >= 6 ? year : year - 1;
+}
 
-async function getDirection(unitId) {
-    const [rows] = await pool.query('SELECT * FROM Org_unit WHERE unit_id = ?', [unitId]);
+async function getDirection(unitId, conn = pool) {
+    const [rows] = await conn.query('SELECT * FROM Org_unit WHERE unit_id = ?', [unitId]);
     if (rows.length === 0) {
         throw new Error(`Unit '${unitId}' not found`);
     }
     while (rows[0].type !== 'direction') {
         const parentId = rows[0].parent_unit_id;
-        const [parentRows] = await pool.query('SELECT * FROM Org_unit WHERE unit_id = ?', [parentId]);
+        const [parentRows] = await conn.query('SELECT * FROM Org_unit WHERE unit_id = ?', [parentId]);
         if (parentRows.length === 0) {
             throw new Error(`Parent unit '${parentId}' not found`);
         }
@@ -16,8 +21,8 @@ async function getDirection(unitId) {
     }
     return rows[0];
 }
-async function getParentUnit(unitId) {
-    const [rows] = await pool.query('SELECT * FROM Org_unit WHERE unit_id = ?', [unitId]);
+async function getParentUnit(unitId, conn = pool) {
+    const [rows] = await conn.query('SELECT * FROM Org_unit WHERE unit_id = ?', [unitId]);
     if (rows.length === 0) {
         throw new Error(`Unit '${unitId}' not found`);
     }
@@ -25,15 +30,15 @@ async function getParentUnit(unitId) {
     if (!parentId) {
         return null; // This unit has no parent
     }
-    const [parentRows] = await pool.query('SELECT * FROM Org_unit WHERE unit_id = ?', [parentId]);
+    const [parentRows] = await conn.query('SELECT * FROM Org_unit WHERE unit_id = ?', [parentId]);
     if (parentRows.length === 0) {
         throw new Error(`Parent unit '${parentId}' not found`);
     }
     return parentRows[0];
 }
 
-async function getHeadingUnit(unitId) {
-    const [rows] = await pool.query('SELECT * FROM Employee WHERE unit_id = ? AND role = ?', [unitId, 'head']);
+async function getHeadingUnit(unitId, conn = pool) {
+    const [rows] = await conn.query('SELECT * FROM Employee WHERE unit_id = ? AND role = ?', [unitId, 'head']);
     return rows[0];
 }
 
@@ -45,47 +50,48 @@ async function getNextStepOrder(requestId) {
     return rows[0].nextOrder;
 }
 
-async function forwardRequestToNextStep(requestId, currentlocation_id, decision, comment) {
+async function forwardRequestToNextStep(requestId, currentlocation_id, decision, comment, conn = pool) {
     //currentlocation_id is the Emp_id of the employee who is currently handling the request
-    const [row] = await pool.query('SELECT * FROM Employee WHERE Emp_id = ?', [currentlocation_id]);
-    const [unitRow] = await pool.query('SELECT * FROM Org_unit WHERE unit_id = ?', [row[0].unit_id]);
+    const [row] = await conn.query('SELECT * FROM Employee WHERE Emp_id = ?', [currentlocation_id]);
+    const [unitRow] = await conn.query('SELECT * FROM Org_unit WHERE unit_id = ?', [row[0].unit_id]);
     const nextStepOrder = await getNextStepOrder(requestId);
 
+    let targetUnit;
 
     if (row[0].role == 'employee') {
         // Forward to the employee's head
-        targetUnit = await getHeadingUnit(row[0].unit_id);
+        targetUnit = await getHeadingUnit(row[0].unit_id, conn);
         if (!targetUnit) {
             throw new Error(`No head found for unit '${row[0].unit_id}'`);
         }
-        await pool.query(
+        await conn.query(
           'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
           [requestId, nextStepOrder, targetUnit.Emp_id, decision, comment, null]
         );
     }
     else if (row[0].role == 'head' && unitRow[0].type !== 'direction') {
         // Forward to the head of the parent unit
-        parentUnit = await getParentUnit(unitRow[0].unit_id);
+        const parentUnit = await getParentUnit(unitRow[0].unit_id, conn);
         if (!parentUnit) {
             throw new Error(`No parent unit found for unit '${unitRow[0].unit_id}'`);
         }
-        targetUnit = await getHeadingUnit(parentUnit.unit_id);
+        targetUnit = await getHeadingUnit(parentUnit.unit_id, conn);
         if (!targetUnit) {
             throw new Error(`No head found for parent unit '${parentUnit.unit_id}'`);
         }
-        await pool.query(
+        await conn.query(
           'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
           [requestId, nextStepOrder, targetUnit.Emp_id, decision, comment, null]
         );
     }
     else if (row[0].role == 'head' && unitRow[0].type == 'direction') {
         // Forward to HR
-        const [hrRows] = await pool.query('SELECT * FROM Employee WHERE role = ? AND unit_id = ?', ['hr', unitRow[0].unit_id]);
+        const [hrRows] = await conn.query('SELECT * FROM Employee WHERE role = ? AND unit_id = ?', ['hr', unitRow[0].unit_id]);
         if (hrRows.length === 0) {
             throw new Error(`No HR employee found for unit '${unitRow[0].unit_id}'`);
         }
         targetUnit = hrRows[0];
-        await pool.query(
+        await conn.query(
           'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
           [requestId, nextStepOrder, targetUnit.Emp_id, decision, comment, null]
         );
@@ -93,26 +99,39 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
     return targetUnit;
 }
 const requestService = {
-  async createRequest({ employeeId, startDate, duration, leaveType, reasonType, justification, url, exercise = String(new Date().getFullYear()) }) {
-    const [result] = await pool.query(
-      'INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [employeeId, exercise, leaveType, startDate, duration, reasonType ?? null, justification ?? null, url ?? null, 'pending']
-    );
-    // after creating requsest, we need to create the first step for the request, which is to send it to the employee's head
-    const [employeeRows] = await pool.query('SELECT * FROM Employee WHERE Emp_id = ?', [employeeId]);
-    if (employeeRows.length === 0) {
-      throw new Error(`Employee '${employeeId}' not found`);
-    }
-    // to avoid floos of request, we check if the employee already has pending request, if so we throw an error
-    const [pendingRequests] = await pool.query(
-      'SELECT * FROM Leave_request WHERE Emp_id = ? AND request_status = ?',
+  async createRequest({ employeeId, startDate, duration, leaveType, reasonType, justification, url, exercise }) {
+    const exerciseYear = exercise ?? getExerciseYearForDate(startDate);
+    const connection = await pool.getConnection();
+
+    try {
+      const [employeeRows] = await connection.query('SELECT * FROM Employee WHERE Emp_id = ?', [employeeId]);
+      if (employeeRows.length === 0) {
+        throw new Error(`Employee '${employeeId}' not found`);
+      }
+
+      const [pendingRequests] = await connection.query(
+        'SELECT * FROM Leave_request WHERE Emp_id = ? AND request_status = ?',
         [employeeId, 'pending']
-    );
-    if (pendingRequests.length > 0) {
-      throw new Error(`Employee '${employeeId}' already has a pending request`);
+      );
+      if (pendingRequests.length > 0) {
+        throw new Error(`Employee '${employeeId}' already has a pending request`);
+      }
+
+      await connection.beginTransaction();
+      const [result] = await connection.query(
+        'INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [employeeId, Number(exerciseYear), leaveType, startDate, duration, reasonType ?? null, justification ?? null, url ?? null, 'pending']
+      );
+
+      await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection);
+      await connection.commit();
+      return result.insertId;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-    await forwardRequestToNextStep(result.insertId, employeeId, null, null);
-    return result.insertId;
   },
   async getRequestSteps(targetId) {
     const [steps] = await pool.query('SELECT * FROM Request_step WHERE target_id = ?', [targetId]);

@@ -34,7 +34,7 @@ const profileService = {
             recrutement_date: rows[0].recrutement_date,
             unit: units.length > 0 ? { id: units[0].unit_id, name: units[0].name, type: units[0].type } : null,
             forward_drh: rows[0].forward_drh,
-            exercises: exercises.map(ex => ({ exercise: ex.exercise, balance: ex.balance })),
+            exercises: exercises.map(ex => ({ exercise: ex.year, balance: ex.balance })),
             leaveRequests: leaveRequests.map(lr => ({
                 id: lr.request_id,
                 startDate: lr.start_date,

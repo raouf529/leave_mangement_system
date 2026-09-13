@@ -52,12 +52,11 @@ function formatDate(dateStr) {
   return new Date(dateStr).toLocaleDateString('fr-FR');
 }
 
-// Purely presentational: derives the "01/07/YYYY au 30/06/YYYY" range and
-// end date from data already returned by the API. No business logic changed.
+// Exercise.year is the fiscal start year. Example: 2025 means 01/07/2025 to 30/06/2026.
 function getExerciseRange(exerciseLabel) {
-  const endYear = parseInt(exerciseLabel, 10);
-  if (Number.isNaN(endYear)) return null;
-  const startYear = endYear - 1;
+  const startYear = parseInt(exerciseLabel, 10);
+  if (Number.isNaN(startYear)) return null;
+  const endYear = startYear + 1;
   return {
     startYear,
     endYear,
