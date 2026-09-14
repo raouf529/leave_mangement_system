@@ -1,18 +1,22 @@
-const requestService = require('../services/requsetServices');
+const requestService = require('../services/requestServices');
 
 const requestController = {
     async createRequest(req, res) {
         try {
-            const employeeId = req.user?.id ?? req.body.employeeId;
-            const { startDate, duration, leaveType, reasonType, justification, url, directToDepartmentHead, sendToDepartmentHead } = req.body;
+            const employeeId = req.user?.id;
+            if (!employeeId) {
+                return res.status(401).json({ error: 'User not authenticated' });
+            }
+            const { startDate, endDate, duration, leaveType, reasonType, justification, url, directToDepartmentHead, sendToDepartmentHead } = req.body;
 
-            if (!employeeId || !startDate || !duration || !leaveType) {
+            if (!employeeId || !startDate || !endDate || !leaveType) {
                 return res.status(400).json({ error: 'Missing required request fields' });
             }
 
             const requestId = await requestService.createRequest({
                 employeeId,
                 startDate,
+                endDate,
                 duration,
                 leaveType,
                 reasonType,
@@ -31,10 +35,12 @@ const requestController = {
     async getRequestSteps(req, res) {
         try {
             const { targetId } = req.params;
-            const steps = await requestService.getRequestSteps(targetId);
+            const currentUserId = req.user?.id;
+            const currentUserRole = req.user?.role;
+            const steps = await requestService.getRequestSteps(targetId, currentUserId, currentUserRole);
             res.status(200).json(steps);
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            res.status(403).json({ error: error.message });
         }
     },
 
@@ -61,17 +67,23 @@ const requestController = {
                 return res.status(400).json({ error: 'Decision is required' });
             }
 
-            const result = await requestService.updateRequestStep(stepId, decision, comment ?? '');
+            const result = await requestService.updateRequestStep(
+                stepId,
+                decision,
+                comment ?? '',
+                req.user?.id,
+                req.user?.role
+            );
             res.status(200).json({ message: 'Request step updated successfully', ...result });
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            res.status(403).json({ error: error.message });
         }
     },
 
     async getRequestDetails(req, res) {
         try {
             const { requestId } = req.params;
-            const request = await requestService.getRequestDetails(requestId);
+            const request = await requestService.getRequestDetails(requestId, req.user?.id, req.user?.role);
 
             if (!request) {
                 return res.status(404).json({ error: 'Request not found' });
@@ -79,16 +91,16 @@ const requestController = {
 
             res.status(200).json(request);
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            res.status(403).json({ error: error.message });
         }
     },
     async cancelRequest(req, res) {
         try {
             const { requestId } = req.params;
-            const result = await requestService.cancelRequest(requestId);
+            const result = await requestService.cancelRequest(requestId, req.user?.id, req.user?.role);
             res.status(200).json({ message: 'Request cancelled successfully', ...result });
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            res.status(403).json({ error: error.message });
         }
     }
 };

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from './api';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -16,11 +16,7 @@ function Login() {
     try {
       // withCredentials lets the browser accept/send the httpOnly cookies
       // the server sets — no tokens ever touch JS or localStorage.
-      await axios.post(
-        'http://localhost:5000/api/auth/login',
-        { email, password },
-        { withCredentials: true }
-      );
+      await api.post('/auth/login', { email, password });
       navigate('/dashboard');
     } catch (error) {
       setError('Email ou mot de passe incorrect');
@@ -30,20 +26,29 @@ function Login() {
   }
 
   return (
-    <div
-      className="d-flex align-items-center justify-content-center min-vh-100"
-      style={{ background: 'linear-gradient(135deg, #eef2fb 0%, #f7f9fc 100%)' }}
-    >
-      <div
-        className="bg-white shadow rounded-4 overflow-hidden"
-        style={{ width: '100%', maxWidth: '420px' }}
-      >
-        <div style={{ height: '6px', backgroundColor: '#0d6efd' }} />
+    <div className="login-page d-flex align-items-center justify-content-center min-vh-100">
+      <style>{`
+        .login-page {
+          --ink: #1B2430;
+          --muted: #65707D;
+          --canvas: #F5F7FA;
+          --primary: #1F5673;
+          background: var(--canvas);
+        }
+        .login-page .accent-bar { height: 6px; background: var(--primary); }
+        .login-page .login-title { color: var(--ink); }
+        .login-page .login-subtitle { color: var(--muted); }
+        .login-page .btn-primary-solid { background: var(--primary); color: #fff; border: none; }
+        .login-page .btn-primary-solid:disabled { opacity: 0.6; }
+      `}</style>
+
+      <div className="bg-white shadow rounded-4 overflow-hidden" style={{ width: '100%', maxWidth: '420px' }}>
+        <div className="accent-bar" />
 
         <div className="p-4 p-md-5">
           <div className="text-center mb-4">
-            <h1 className="h3 fw-bold mb-1">Gestion des congés</h1>
-            <p className="text-muted mb-0">Connectez-vous pour accéder à votre espace</p>
+            <h1 className="h3 fw-bold mb-1 login-title">Gestion des congés</h1>
+            <p className="login-subtitle mb-0">Connectez-vous pour accéder à votre espace</p>
           </div>
 
           <form onSubmit={handleLogin} noValidate>
@@ -77,11 +82,7 @@ function Login() {
               </div>
             )}
 
-            <button
-              type="submit"
-              className="btn btn-primary btn-lg w-100"
-              disabled={loading}
-            >
+            <button type="submit" className="btn btn-primary-solid btn-lg w-100" disabled={loading}>
               {loading ? 'Connexion...' : 'Se connecter'}
             </button>
           </form>

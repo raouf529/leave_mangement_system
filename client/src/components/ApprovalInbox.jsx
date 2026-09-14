@@ -1,24 +1,27 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from './api';
 import Header from './header';
 import useCurrentUser from '../hooks/useCurrentUser';
 
 function getMySteps() {
-  return axios.get('http://localhost:5000/api/request/steps/me', { withCredentials: true });
+  return api.get('/request/steps/me');
 }
 
 function decideStep(stepId, decision, comment) {
-  return axios.patch(
-    `http://localhost:5000/api/request/step/${stepId}`,
-    { decision, comment },
-    { withCredentials: true }
-  );
+  return api.patch(`/request/step/${stepId}`, { decision, comment });
 }
 
 const LEAVE_TYPE_LABELS = {
   annual: 'Congé annuel',
   exceptional: 'Congé exceptionnel',
   advance: 'Avance sur congé'
+};
+
+const STATUS_STYLES = {
+  pending: { bg: 'var(--amber-soft)', fg: 'var(--accent-amber)' },
+  approved: { bg: 'var(--success-soft)', fg: 'var(--success)' },
+  rejected: { bg: 'var(--danger-soft)', fg: 'var(--danger)' },
+  cancelled: { bg: 'var(--neutral-soft)', fg: 'var(--muted)' }
 };
 
 function formatDate(dateStr) {
@@ -31,6 +34,16 @@ function getEndDate(startDate, duration) {
   const d = new Date(startDate);
   d.setDate(d.getDate() + (Number(duration) || 0));
   return d;
+}
+
+function StatusBadge({ status }) {
+  const style = STATUS_STYLES[status] ?? STATUS_STYLES.cancelled;
+  return (
+    <span className="status-badge" style={{ background: style.bg, color: style.fg }}>
+      <span className="status-dot" style={{ background: style.fg }} />
+      {status === 'pending' ? 'En attente' : status === 'approved' ? 'Approuvée' : status === 'rejected' ? 'Refusée' : status === 'cancelled' ? 'Annulée' : status}
+    </span>
+  );
 }
 
 function ApprovalInbox() {
@@ -99,10 +112,36 @@ function ApprovalInbox() {
   }
 
   return (
-    <div
-      className="min-vh-100"
-      style={{ background: 'linear-gradient(135deg, #eef2fb 0%, #f7f9fc 100%)' }}
-    >
+    <div className="leave-dashboard">
+      <style>{`
+        .leave-dashboard {
+          --ink: #1B2430;
+          --muted: #65707D;
+          --surface: #FFFFFF;
+          --canvas: #F5F7FA;
+          --border: #E4E8ED;
+          --primary: #1F5673;
+          --accent-amber: #C98A2C;
+          --amber-soft: #FBF1DF;
+          --success: #3E8A5F;
+          --success-soft: #E7F4EC;
+          --danger: #C1544A;
+          --danger-soft: #FBEAE8;
+          --neutral-soft: #EEF1F4;
+          min-height: 100vh;
+          background: var(--canvas);
+          color: var(--ink);
+        }
+        .section-card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); }
+        .section-title { font-size: 1.05rem; font-weight: 600; color: var(--ink); }
+        .request-card { border: 1px solid var(--border); border-radius: 14px; background: #fff; padding: 1.1rem 1.2rem; }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.3rem 0.65rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+        .muted-note { font-size: 0.82rem; color: var(--muted); }
+        .primary-button { background: var(--primary); color: #fff; }
+        .outline-danger-button { border: 1px solid var(--danger); color: var(--danger); background: #fff; }
+      `}</style>
+
       <Header />
 
       <main className="container py-4 py-md-5">
@@ -117,31 +156,36 @@ function ApprovalInbox() {
           </div>
         )}
 
-        <div className="bg-white shadow rounded-4 p-4 p-md-5">
+        <div className="section-card p-4 p-md-5">
           {loading ? (
-            <div className="text-center text-muted py-5">Chargement...</div>
+            <div className="text-center py-5 muted-note">Chargement...</div>
           ) : steps.length === 0 ? (
-            <p className="text-muted mb-0">Aucune demande en attente.</p>
+            <p className="muted-note mb-0">Aucune demande en attente.</p>
           ) : (
             <div className="d-flex flex-column gap-3">
               {steps.map((step) => {
                 const endDate = getEndDate(step.start_date, step.duration);
                 const isActioning = actioningStepId === step.step_id;
                 return (
-                  <div key={step.step_id} className="border rounded-4 p-3 p-md-4">
+                  <div key={step.step_id} className="request-card">
                     <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                       <p className="fw-bold mb-0">{step.First_name} {step.Last_name}</p>
-                      <span className="badge rounded-pill bg-light text-dark border">
+                      <StatusBadge status={step.request_status ?? 'pending'} />
+                    </div>
+
+                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                      <span className="badge rounded-pill border" style={{ background: 'var(--neutral-soft)', color: 'var(--primary)' }}>
                         {LEAVE_TYPE_LABELS[step.leave_type] ?? step.leave_type}
                       </span>
+                      <span className="muted-note">{step.email}</span>
                     </div>
-                    <p className="text-muted small mb-2">{step.email}</p>
+
                     <p className="mb-1">
                       {formatDate(step.start_date)}{endDate ? ` → ${formatDate(endDate)}` : ''}
                       {' · '}{step.duration} j
                     </p>
                     {step.justification && (
-                      <p className="text-muted small mb-3">Justification : {step.justification}</p>
+                      <p className="muted-note mb-3">Justification : {step.justification}</p>
                     )}
 
                     {step.leave_type === 'annual' && step.annualSplit && step.annualSplit.length > 0 && (
@@ -149,7 +193,7 @@ function ApprovalInbox() {
                         <p className="small fw-medium text-muted mb-2">Répartition annuelle :</p>
                         <div className="d-flex flex-wrap gap-2">
                           {step.annualSplit.map((allocation, index) => (
-                            <span key={`${step.request_id}-${index}`} className="badge rounded-pill bg-primary-subtle text-primary border px-3 py-2">
+                            <span key={`${step.request_id}-${index}`} className="badge rounded-pill border px-3 py-2" style={{ background: 'var(--neutral-soft)', color: 'var(--primary)' }}>
                               Exercice {allocation.year} : {allocation.daysAllocated} j
                             </span>
                           ))}
@@ -164,19 +208,17 @@ function ApprovalInbox() {
                         placeholder="Commentaire (requis pour refuser)"
                         style={{ maxWidth: '280px' }}
                         value={rejectComment[step.step_id] ?? ''}
-                        onChange={(e) =>
-                          setRejectComment((prev) => ({ ...prev, [step.step_id]: e.target.value }))
-                        }
+                        onChange={(e) => setRejectComment((prev) => ({ ...prev, [step.step_id]: e.target.value }))}
                       />
                       <button
-                        className="btn btn-success btn-sm"
+                        className="btn btn-sm primary-button"
                         onClick={() => handleApprove(step.step_id)}
                         disabled={isActioning}
                       >
                         Approuver
                       </button>
                       <button
-                        className="btn btn-outline-danger btn-sm"
+                        className="btn btn-sm outline-danger-button"
                         onClick={() => handleReject(step.step_id)}
                         disabled={isActioning}
                       >
