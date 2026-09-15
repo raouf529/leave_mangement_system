@@ -180,6 +180,7 @@ function Dashboard() {
       <Header
         EmployeeName={employeeInfo ? `${employeeInfo.firstName} ${employeeInfo.lastName}` : ''}
         EmployeeRole={employeeInfo ? employeeInfo.role : ''}
+        EmployeeRoleLabel={employeeInfo ? employeeInfo.roleLabel : ''}
       />
 
       <div className="hero-strip py-4 py-md-5">
@@ -387,6 +388,7 @@ function Dashboard() {
         />
       )}
     </div>
+    
   );
 }
 

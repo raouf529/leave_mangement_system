@@ -1,20 +1,36 @@
-CREATE TABLE `Org_unit` (
-  `unit_id` integer PRIMARY KEY AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `type` ENUM ('section', 'department', 'direction') NOT NULL,
-  `parent_unit_id` integer
+CREATE TABLE `Direction` (
+  `id` integer PRIMARY KEY AUTO_INCREMENT,
+  `nom` varchar(100) NOT NULL
 );
 
-CREATE TABLE `Employee` (
-  `Emp_id` integer PRIMARY KEY AUTO_INCREMENT,
-  `First_name` varchar(100) NOT NULL,
-  `Last_name` varchar(100) NOT NULL,
-  `email` varchar(150) UNIQUE NOT NULL,
+CREATE TABLE `Departement` (
+  `id` integer PRIMARY KEY AUTO_INCREMENT,
+  `nom` varchar(100) NOT NULL,
+  `direction_id` integer NOT NULL
+);
+
+CREATE TABLE `Service` (
+  `id` integer PRIMARY KEY AUTO_INCREMENT,
+  `nom` varchar(100) NOT NULL,
+  `direction_id` integer,
+  `departement_id` integer
+);
+
+CREATE TABLE `Employe` (
+  `id` integer PRIMARY KEY AUTO_INCREMENT,
+  `nom` varchar(100) NOT NULL,
+  `nom_jeune_fille` varchar(100) NOT NULL,
+  `prenom` varchar(150) NOT NULL UNIQUE,
   `password` varchar(200) NOT NULL,
-  `recrutement_date` date NOT NULL,
-  `role` ENUM ('employee', 'head', 'hr', 'admin') NOT NULL,
-  `unit_id` integer NOT NULL,
-  `forward_drh` bool NOT NULL
+  `email` varchar(200) NOT NULL UNIQUE,
+  `date_entree` date NOT NULL,
+  `role` ENUM ('directeur', 'chef_departement', 'chef_service', 'drh', 'employe') NOT NULL,
+  `forward_drh` bool NOT NULL,
+  `direction_id` integer,
+  `departement_id` integer,
+  `service_id` integer,
+  `matricule` integer,
+  `fonction` varchar(100)
 );
 
 CREATE TABLE `Attendance` (
@@ -23,6 +39,8 @@ CREATE TABLE `Attendance` (
   `attend` bool NOT NULL,
   PRIMARY KEY (`Emp_id`, `attendance_date`)
 );
+
+
 
 CREATE TABLE `Exercise` (
   `exercise_id` integer PRIMARY KEY AUTO_INCREMENT,
@@ -73,22 +91,38 @@ CREATE TABLE `Request_exercise_allocation` (
   UNIQUE KEY `uniq_request_exercise` (`request_id`, `exercise_id`)
 );
 
-ALTER TABLE `Org_unit` ADD FOREIGN KEY (`parent_unit_id`) REFERENCES `Org_unit` (`unit_id`);
+CREATE TABLE `Notification` (
+  `notification_id` int NOT NULL AUTO_INCREMENT,
+  `target_id` int NOT NULL,
+  `request_id` int,
+  `content` varchar(500) NOT NULL,
+  `is_read` bool NOT NULL DEFAULT false,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notification_id`),
+  KEY `idx_notification_target` (`target_id`)
+);
 
-ALTER TABLE `Employee` ADD FOREIGN KEY (`unit_id`) REFERENCES `Org_unit` (`unit_id`);
 
-ALTER TABLE `Attendance` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employee` (`Emp_id`);
+ALTER TABLE `Departement` ADD FOREIGN KEY (`direction_id`) REFERENCES `Direction` (`id`);
+ALTER TABLE `Service` ADD FOREIGN KEY (`direction_id`) REFERENCES `Direction` (`id`);
+ALTER TABLE `Service` ADD FOREIGN KEY (`departement_id`) REFERENCES `Departement` (`id`);
 
-ALTER TABLE `Exercise` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employee` (`Emp_id`);
+ALTER TABLE `Employe` ADD FOREIGN KEY (`direction_id`) REFERENCES `Direction` (`id`);
+ALTER TABLE `Employe` ADD FOREIGN KEY (`departement_id`) REFERENCES `Departement` (`id`);
+ALTER TABLE `Employe` ADD FOREIGN KEY (`service_id`) REFERENCES `Service` (`id`);
 
-ALTER TABLE `Leave_request` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employee` (`Emp_id`);
+ALTER TABLE `Attendance` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
 
-ALTER TABLE `Request_step` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);
+ALTER TABLE `Exercise` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
 
-ALTER TABLE `Request_step` ADD FOREIGN KEY (`target_id`) REFERENCES `Employee` (`Emp_id`);
-
+ALTER TABLE `Leave_request` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
 ALTER TABLE `Leave_request` ADD FOREIGN KEY (`Emp_id`, `exercise`) REFERENCES `Exercise` (`Emp_id`, `year`);
 
-ALTER TABLE `Request_exercise_allocation` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);
+ALTER TABLE `Request_step` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);
+ALTER TABLE `Request_step` ADD FOREIGN KEY (`target_id`) REFERENCES `Employe` (`id`);
 
+ALTER TABLE `Request_exercise_allocation` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);
 ALTER TABLE `Request_exercise_allocation` ADD FOREIGN KEY (`exercise_id`) REFERENCES `Exercise` (`exercise_id`);
+
+ALTER TABLE `Notification` ADD FOREIGN KEY (`target_id`) REFERENCES `Employe` (`id`);
+ALTER TABLE `Notification` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);

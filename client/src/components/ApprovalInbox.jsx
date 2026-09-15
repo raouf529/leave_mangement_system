@@ -187,6 +187,18 @@ function ApprovalInbox() {
                     {step.justification && (
                       <p className="muted-note mb-3">Justification : {step.justification}</p>
                     )}
+                    {step.url_justification && (
+                      <p className="mb-3">
+                        <a
+                          href={`${api.defaults.baseURL}/request/${step.request_id}/document`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-sm btn-outline-secondary"
+                        >
+                          Ouvrir le document justificatif
+                        </a>
+                      </p>
+                    )}
 
                     {step.leave_type === 'annual' && step.annualSplit && step.annualSplit.length > 0 && (
                       <div className="mb-3">

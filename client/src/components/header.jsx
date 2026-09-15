@@ -1,14 +1,29 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import useCurrentUser from '../hooks/useCurrentUser';
+import api from './api';
 
-function Header({ EmployeeName, EmployeeRole }) {
+function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
   const [openMenu, setOpenMenu] = useState(false);
-  const location = useLocation();
-  const { fullName, role } = useCurrentUser();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const navigate = useNavigate();
+  const { fullName, role, roleLabel } = useCurrentUser();
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      sessionStorage.removeItem('role');
+      setOpenMenu(false);
+      setLoggingOut(false);
+      navigate('/', { replace: true });
+    }
+  }
 
   const currentName = EmployeeName || fullName || '';
   const currentRole = EmployeeRole || role || '';
+  const displayedRole = EmployeeRoleLabel || roleLabel || currentRole;
   const canSeeSupervisorLinks = ['head', 'hr'].includes(currentRole);
 
   return (
@@ -35,6 +50,19 @@ function Header({ EmployeeName, EmployeeRole }) {
         .app-header .menu-link:hover { background: var(--primary-soft); }
         .app-header .user-name { color: var(--ink); font-weight: 600; }
         .app-header .user-role { color: var(--muted); font-size: 0.82rem; }
+        .app-header .logout-btn {
+          display: inline-flex; align-items: center; gap: 0.45rem; min-height: 40px;
+          padding: 0.5rem 0.8rem; border: 1px solid #E4B7B7; border-radius: 10px;
+          background: #FFF7F7; color: #A33A3A; font-size: 0.88rem; font-weight: 600;
+          transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+        }
+        .app-header .logout-btn:hover:not(:disabled) { background: #FCEAEA; border-color: #D99696; color: #872D2D; }
+        .app-header .logout-btn:disabled { cursor: wait; opacity: 0.65; }
+        .app-header .logout-btn svg { flex: 0 0 auto; }
+        @media (max-width: 575.98px) {
+          .app-header .logout-label { display: none; }
+          .app-header .logout-btn { width: 40px; justify-content: center; padding: 0; }
+        }
       `}</style>
       <div className="container d-flex align-items-center justify-content-between py-3 position-relative">
         <div className="d-flex align-items-center gap-3">
@@ -61,7 +89,7 @@ function Header({ EmployeeName, EmployeeRole }) {
               <ul className="list-unstyled mb-0">
                 <li>
                   <Link className="menu-link" to="/dashboard" onClick={() => setOpenMenu(false)}>
-                    Profile
+                    Tableau de bord
                   </Link>
                 </li>
                 {canSeeSupervisorLinks && (
@@ -94,7 +122,24 @@ function Header({ EmployeeName, EmployeeRole }) {
 
           <div className="text-end d-none d-sm-block">
             <p className="mb-0 user-name">{currentName}</p>
-            <p className="mb-0 user-role">{currentRole}</p>
+            <p className="mb-0 user-role">{displayedRole}</p>
+          </div>
+          <div className="text-end">
+            <button
+              type="button"
+              className="logout-btn"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              aria-label="Déconnexion"
+              title="Déconnexion"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M10 17l5-5-5-5" />
+                <path d="M15 12H3" />
+                <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+              </svg>
+              <span className="logout-label">{loggingOut ? 'Déconnexion...' : 'Déconnexion'}</span>
+            </button>
           </div>
         </div>
       </div>

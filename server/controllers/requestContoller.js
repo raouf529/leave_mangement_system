@@ -1,4 +1,6 @@
 const requestService = require('../services/requestServices');
+const fs = require('fs');
+const path = require('path');
 
 const requestController = {
     async createRequest(req, res) {
@@ -8,6 +10,7 @@ const requestController = {
                 return res.status(401).json({ error: 'User not authenticated' });
             }
             const { startDate, endDate, duration, leaveType, reasonType, justification, url, directToDepartmentHead, sendToDepartmentHead } = req.body;
+            const justificationUrl = req.file ? `/uploads/justifications/${req.file.filename}` : url;
 
             if (!employeeId || !startDate || !endDate || !leaveType) {
                 return res.status(400).json({ error: 'Missing required request fields' });
@@ -21,13 +24,16 @@ const requestController = {
                 leaveType,
                 reasonType,
                 justification,
-                url,
+                url: justificationUrl,
                 directToDepartmentHead: Boolean(directToDepartmentHead || sendToDepartmentHead),
                 sendToDepartmentHead: Boolean(directToDepartmentHead || sendToDepartmentHead),
             });
 
             res.status(201).json({ message: 'Leave request created successfully', requestId });
         } catch (error) {
+            if (req.file) {
+                fs.unlink(req.file.path, () => {});
+            }
             res.status(400).json({ error: error.message });
         }
     },
@@ -92,6 +98,25 @@ const requestController = {
             res.status(200).json(request);
         } catch (error) {
             res.status(403).json({ error: error.message });
+        }
+    },
+    async openJustificationDocument(req, res) {
+        try {
+            const { requestId } = req.params;
+            const request = await requestService.getRequestDetails(requestId, req.user?.id, req.user?.role);
+            if (!request.url_justification) {
+                return res.status(404).json({ error: 'No justification document found' });
+            }
+
+            const filename = path.basename(request.url_justification);
+            const filePath = path.join(__dirname, '..', 'uploads', 'justifications', filename);
+            if (!fs.existsSync(filePath)) {
+                return res.status(404).json({ error: 'Justification document not found' });
+            }
+
+            return res.sendFile(filePath);
+        } catch (error) {
+            return res.status(403).json({ error: error.message });
         }
     },
     async cancelRequest(req, res) {

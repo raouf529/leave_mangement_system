@@ -27,8 +27,8 @@ api.interceptors.response.use(
       // real authority on role/permissions. Clear it on auth failure so
       // stale UI never implies access that no longer holds.
       sessionStorage.removeItem('role');
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        window.location.href = '/login';
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
+        window.location.replace('/');
       }
     }
     return Promise.reject(error);

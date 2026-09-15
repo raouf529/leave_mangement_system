@@ -12,6 +12,24 @@ function generatePassword() {
     return password;
 }
 
+function mapRole(role) {
+    if (role === 'drh') return 'hr';
+    if (['directeur', 'chef_departement', 'chef_service'].includes(role)) return 'head';
+    if (role === 'employe') return 'employee';
+    return role;
+}
+
+function getRoleLabel(role) {
+    const labels = {
+        directeur: 'Directeur',
+        chef_departement: 'Chef de département',
+        chef_service: 'Chef de service',
+        drh: 'Ressources humaines',
+        employe: 'Employé'
+    };
+    return labels[role] ?? role;
+}
+
 function verifyRefreshToken(token) {
     return jwt.verify(
         token,
@@ -21,12 +39,19 @@ function verifyRefreshToken(token) {
 
 function generateTokens(user) {
     const accessToken = jwt.sign(
-        { id: user.Emp_id, firstName: user.First_name, lastName: user.Last_name, role: user.role, unitId: user.unit_id },
+        {
+            id: user.id,
+            firstName: user.prenom,
+            lastName: user.nom,
+            role: mapRole(user.role),
+            roleLabel: getRoleLabel(user.role),
+            unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null
+        },
         process.env.JWT_SECRET,
         { expiresIn: "1h" }
     );
     const refreshToken = jwt.sign(
-        { id: user.Emp_id },
+        { id: user.id },
         process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET,
         { expiresIn: "7d" }
     );
@@ -34,40 +59,8 @@ function generateTokens(user) {
 }
 
 const authService = {
-    async registerEmployee({ firstName, lastName, email, role, recrutement_date, unit_name, forward_drh }) {
-        const [existingUser] = await pool.query('SELECT * FROM Employee WHERE email = ?', [email]);
-        if (existingUser.length > 0) {
-            throw new Error('Email already registered');
-        }
-
-        const password = generatePassword();
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        const [units] = await pool.query('SELECT * FROM Org_unit WHERE name = ?', [unit_name]);
-        if (!units || units.length === 0) {
-            throw new Error(`Unit '${unit_name}' not found`);
-        }
-        const unit = units[0];
-
-        let computedForwardDrh = forward_drh;
-        if (computedForwardDrh === undefined) {
-            if (role === 'head' && (unit.type === 'department' || unit.type === 'direction')) {
-                computedForwardDrh = 1;
-            } else {
-                computedForwardDrh = 0;
-            }
-        }
-
-        const [result] = await pool.query(
-            'INSERT INTO Employee (First_name, Last_name, email, password, role, recrutement_date, unit_id, forward_drh) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [firstName, lastName, email, hashedPassword, role, recrutement_date, unit.unit_id, computedForwardDrh]
-        );
-
-        return { id: result.insertId, firstName, lastName, email, role, generatedPassword: password };
-    },
-
     async loginEmployee({ email, password }) {
-        const [users] = await pool.query('SELECT * FROM Employee WHERE email = ?', [email]);
+        const [users] = await pool.query('SELECT * FROM Employe WHERE email = ?', [email]);
         if (users.length === 0) {
             throw new Error('Invalid email or password');
         }
@@ -78,15 +71,14 @@ const authService = {
             throw new Error('Invalid email or password');
         }
 
-        const { Emp_id, First_name, Last_name, role, unit_id } = user;
-        const { accessToken, refreshToken } = generateTokens({ Emp_id, First_name, Last_name, role, unit_id });
-        return { accessToken, refreshToken, role };
+        const { accessToken, refreshToken } = generateTokens(user);
+        return { accessToken, refreshToken, role: mapRole(user.role), roleLabel: getRoleLabel(user.role) };
     },
 
     // Used by the refresh endpoint to rebuild a fresh access token payload
     // (role/unit could have changed since the refresh token was issued).
     async getEmployeeById(id) {
-        const [users] = await pool.query('SELECT * FROM Employee WHERE Emp_id = ?', [id]);
+        const [users] = await pool.query('SELECT * FROM Employe WHERE id = ?', [id]);
         if (users.length === 0) {
             throw new Error('User not found');
         }

@@ -307,7 +307,7 @@ function EmployeesDashboard() {
                         </div>
                       </td>
                       <td className="muted-note">{emp.email}</td>
-                      <td><span className="role-chip">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
+                      <td><span className="role-chip">{emp.roleLabel ?? ROLE_LABELS[emp.role] ?? emp.role}</span></td>
                       <td>{emp.unit?.name ?? '—'}</td>
                       <td>{emp.unit?.type ?? '—'}</td>
                       <td className="text-end">
@@ -333,7 +333,7 @@ function EmployeesDashboard() {
                   <h2 className="h5 fw-bold mb-0">
                     {detail ? `${detail.firstName} ${detail.lastName}` : "Détails de l'employé"}
                   </h2>
-                  {detail && <p className="muted-note mb-0">{ROLE_LABELS[detail.role] ?? detail.role}</p>}
+                  {detail && <p className="muted-note mb-0">{detail.roleLabel ?? ROLE_LABELS[detail.role] ?? detail.role}</p>}
                 </div>
               </div>
               <button className="btn btn-sm close-btn" onClick={closeDetails}>

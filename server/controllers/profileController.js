@@ -3,7 +3,6 @@ const profileServices = require('../services/profileServices');
 const profileController = {
     async getProfile(req, res) {
         try {
-            console.log('>> getProfile called. params.id:', req.params.id, '| req.user:', req.user);
             const userId = req.params && req.params.id ? req.params.id : req.user.id;
             const profile = await profileServices.getEmployeeProfile(userId);
             res.status(200).json(profile);

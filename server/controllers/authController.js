@@ -1,5 +1,23 @@
 const authService = require('../services/authServices');
 
+function mapRole(role) {
+    if (role === 'drh') return 'hr';
+    if (['directeur', 'chef_departement', 'chef_service'].includes(role)) return 'head';
+    if (role === 'employe') return 'employee';
+    return role;
+}
+
+function getRoleLabel(role) {
+    const labels = {
+        directeur: 'Directeur',
+        chef_departement: 'Chef de département',
+        chef_service: 'Chef de service',
+        drh: 'Ressources humaines',
+        employe: 'Employé'
+    };
+    return labels[role] ?? role;
+}
+
 const isProd = process.env.NODE_ENV === 'production';
 
 const ACCESS_COOKIE_OPTS = {
@@ -51,12 +69,13 @@ const authController = {
 
             const user = await authService.getEmployeeById(userId);
             res.status(200).json({
-                id: user.Emp_id,
-                firstName: user.First_name,
-                lastName: user.Last_name,
+                id: user.id,
+                firstName: user.prenom,
+                lastName: user.nom,
                 email: user.email,
-                role: user.role,
-                unitId: user.unit_id,
+                role: mapRole(user.role),
+                roleLabel: getRoleLabel(user.role),
+                unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null,
             });
         } catch (error) {
             res.status(400).json({ error: error.message });

@@ -36,6 +36,7 @@ export function useCurrentUser() {
     loading,
     error,
     role: user?.role ?? null,
+    roleLabel: user?.roleLabel ?? user?.role ?? '',
     fullName: user ? `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() : '',
   };
 }
