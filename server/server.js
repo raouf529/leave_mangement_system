@@ -18,6 +18,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/profile', require('./routes/profileRoutes'));
 app.use('/api/request', require('./routes/requestRoutes'));
-
+app.use('/api/notification', require('./routes/notificationRoutes'));
+app.use('/api/exercise', require('./routes/exerciseRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

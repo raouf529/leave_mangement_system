@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
 import Header from './header';
@@ -39,8 +39,6 @@ const STATUS_STYLES = {
   rejected: { bg: 'var(--danger-soft)', fg: 'var(--danger)' },
   cancelled: { bg: 'var(--neutral-soft)', fg: 'var(--muted)' }
 };
-
-const SPLIT_PALETTE = ['var(--primary)', 'var(--accent-amber)', 'var(--success)', 'var(--danger)'];
 
 function formatDate(dateStr) {
   if (!dateStr) return '—';
@@ -92,7 +90,12 @@ function Dashboard() {
   const [error, setError] = useState('');
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [cancelingId, setCancelingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
   const navigate = useNavigate();
+
+  function toggleDetails(requestId) {
+    setExpandedId((prev) => (prev === requestId ? null : requestId));
+  }
 
   async function handleCancelRequest(requestId) {
     setCancelingId(requestId);
@@ -165,16 +168,22 @@ function Dashboard() {
         .hero-label { color: var(--muted); font-size: 0.85rem; }
         .hero-number { font-size: 2.5rem; font-weight: 700; line-height: 1; color: var(--primary); }
         .section-card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); }
-        .section-title { font-size: 1.05rem; font-weight: 600; color: var(--ink); }
-        .exercise-card { border-left: 3px solid #D8DEE5; background: #FAFBFC; border-radius: 10px; padding: 1rem 1.1rem; }
-        .exercise-card.current { border-left-color: var(--accent-amber); background: var(--amber-soft); }
-        .exercise-balance { font-size: 1.5rem; font-weight: 700; }
-        .split-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--neutral-soft); }
-        .split-segment { height: 100%; }
-        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.3rem 0.65rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .section-title { font-size: 1.25rem; font-weight: 600; color: var(--ink); }
+        .exercise-card { border-left: 3px solid #D8DEE5; background: #FAFBFC; border-radius: 10px; padding: 1.1rem 1.25rem; }
+        .exercise-card p { font-size: 1rem; }
+        .exercise-balance { font-size: 1.85rem; font-weight: 700; }
+        .split-list { font-size: 0.95rem; }
+        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.88rem; font-weight: 600; }
         .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-        .muted-note { font-size: 0.82rem; color: var(--muted); }
-        .cancel-btn { border: 1px solid var(--border); color: var(--ink); background: #fff; }
+        .muted-note { font-size: 0.92rem; color: var(--muted); }
+        .cancel-btn { border: 1px solid var(--border); color: var(--ink); background: #fff; font-size: 0.9rem; }
+        .history-table { font-size: 0.98rem; }
+        .history-table thead th { font-size: 0.85rem; color: var(--muted); text-transform: none; padding-bottom: 0.75rem; }
+        .history-table td { padding-top: 1rem; padding-bottom: 1rem; }
+        .info-btn { border: 1px solid var(--border); background: #fff; color: var(--primary); font-size: 0.88rem; }
+        .detail-row td { background: var(--canvas); border-top: none; padding-top: 0.9rem; padding-bottom: 1.1rem; font-size: 0.92rem; }
+        .detail-row .detail-line { margin-bottom: 0.35rem; }
+        .detail-row .detail-line:last-child { margin-bottom: 0; }
       `}</style>
 
       <Header
@@ -192,13 +201,6 @@ function Dashboard() {
             </h1>
           </div>
           <div className="d-flex align-items-end gap-4">
-            <div>
-              <p className="hero-label mb-1">Solde disponible</p>
-              <p className="hero-number mb-0">
-                {loading ? '—' : totalBalance}{' '}
-                <span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--muted)' }}>jours</span>
-              </p>
-            </div>
             <button
               className="btn btn-lg"
               style={{ background: 'var(--primary)', color: '#fff' }}
@@ -232,24 +234,16 @@ function Dashboard() {
                     const current = isCurrentExercise(exercise.exercise);
                     return (
                       <div className="col-12 col-sm-6 col-md-4" key={index}>
-                        <div className={`exercise-card h-100 ${current ? 'current' : ''}`}>
+                        <div className="exercise-card h-100">
                           <p className="fw-semibold mb-1">
                             {range ? `Exercice ${range.startYear} / ${range.endYear}` : exercise.exercise}
                           </p>
                           {range && <p className="muted-note mb-3">Du {range.from} au {range.to}</p>}
-                          <p
-                            className="exercise-balance mb-1"
-                            style={{ color: current ? 'var(--accent-amber)' : 'var(--primary)' }}
-                          >
+                          <p className="exercise-balance mb-1" style={{ color: 'var(--primary)' }}>
                             {exercise.balance}{' '}
-                            <span style={{ fontSize: '0.9rem', fontWeight: 500, color: 'var(--muted)' }}>jours</span>
+                            <span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--muted)' }}>jours</span>
                           </p>
-                          {current && (
-                            <span className="status-badge" style={{ background: 'var(--amber-soft)', color: 'var(--accent-amber)' }}>
-                              <span className="status-dot" style={{ background: 'var(--accent-amber)' }} />
-                              Exercice en cours
-                            </span>
-                          )}
+                          {current && <p className="muted-note mb-0">Exercice en cours</p>}
                         </div>
                       </div>
                     );
@@ -268,7 +262,6 @@ function Dashboard() {
                 <div className="row g-3">
                   {annualSplitRequests.map((request) => {
                     const allocations = request.allocations ?? [];
-                    const total = allocations.reduce((sum, a) => sum + Number(a.daysAllocated || 0), 0) || 1;
                     return (
                       <div key={request.id} className="col-12 col-lg-6">
                         <div className="exercise-card h-100">
@@ -277,33 +270,13 @@ function Dashboard() {
                             <span className="muted-note">{request.duration} j</span>
                           </div>
                           {allocations.length > 0 ? (
-                            <>
-                              <div className="split-bar mb-2">
-                                {allocations.map((a, i) => (
-                                  <div
-                                    key={i}
-                                    className="split-segment"
-                                    style={{
-                                      width: `${(Number(a.daysAllocated) / total) * 100}%`,
-                                      background: SPLIT_PALETTE[i % SPLIT_PALETTE.length]
-                                    }}
-                                  />
-                                ))}
-                              </div>
-                              <div className="d-flex flex-wrap gap-3">
-                                {allocations.map((a, i) => (
-                                  <span key={i} className="muted-note d-flex align-items-center gap-2">
-                                    <span
-                                      style={{
-                                        width: 8, height: 8, borderRadius: '50%', display: 'inline-block',
-                                        background: SPLIT_PALETTE[i % SPLIT_PALETTE.length]
-                                      }}
-                                    />
-                                    Exercice {a.year} : {a.daysAllocated} j
-                                  </span>
-                                ))}
-                              </div>
-                            </>
+                            <div className="split-list">
+                              {allocations.map((a, i) => (
+                                <div key={i} className="mb-1">
+                                  Exercice {a.year} : {a.daysAllocated} j
+                                </div>
+                              ))}
+                            </div>
                           ) : (
                             <p className="muted-note mb-0">Aucune allocation enregistrée.</p>
                           )}
@@ -321,9 +294,9 @@ function Dashboard() {
                 <p className="muted-note mb-0">Aucune demande de congé pour le moment.</p>
               ) : (
                 <div className="table-responsive">
-                  <table className="table align-middle mb-0">
+                  <table className="history-table table align-middle mb-0">
                     <thead>
-                      <tr style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>
+                      <tr>
                         <th className="fw-medium">Type</th>
                         <th className="fw-medium">Dates</th>
                         <th className="fw-medium">Durée</th>
@@ -345,31 +318,53 @@ function Dashboard() {
                         const annualSplit = lr.leaveType === 'annual' && lr.allocations?.length
                           ? lr.allocations.map((allocation) => `Exercice ${allocation.year} : ${allocation.daysAllocated} j`).join(' · ')
                           : null;
+                        const hasDetails = Boolean(annualSplit || (lr.status === 'pending' && currentStepLabel) || rejectionNote);
+                        const isExpanded = expandedId === lr.id;
 
                         return (
-                          <tr key={lr.id}>
-                            <td className="fw-medium">{LEAVE_TYPE_LABELS[lr.leaveType] ?? lr.leaveType}</td>
-                            <td>
-                              {formatDate(lr.startDate)}
-                              {endDate ? ` → ${formatDate(endDate)}` : ''}
-                            </td>
-                            <td>{lr.duration} j</td>
-                            <td><StatusBadge status={lr.status} /></td>
-                            <td>
-                              <div className="muted-note mb-2">
-                                {annualSplit ? <div className="mb-1">Répartition : {annualSplit}</div> : null}
-                                {lr.status === 'pending' && currentStepLabel ? <div className="mb-1">Étape : {currentStepLabel}</div> : null}
-                                {rejectionNote ? <div style={{ color: 'var(--danger)' }}>Motif : {rejectionNote}</div> : null}
-                              </div>
-                              <button
-                                className="btn btn-sm cancel-btn"
-                                disabled={cancelingId === lr.id || lr.status === 'cancelled' || lr.status === 'rejected' || lr.status === 'approved'}
-                                onClick={() => handleCancelRequest(lr.id)}
-                              >
-                                {cancelingId === lr.id ? 'Annulation...' : 'Annuler'}
-                              </button>
-                            </td>
-                          </tr>
+                          <Fragment key={lr.id}>
+                            <tr>
+                              <td className="fw-medium">{LEAVE_TYPE_LABELS[lr.leaveType] ?? lr.leaveType}</td>
+                              <td>
+                                {formatDate(lr.startDate)}
+                                {endDate ? ` → ${formatDate(endDate)}` : ''}
+                              </td>
+                              <td>{lr.duration} j</td>
+                              <td><StatusBadge status={lr.status} /></td>
+                              <td>
+                                <div className="d-flex gap-2">
+                                  {hasDetails && (
+                                    <button
+                                      className="btn btn-sm info-btn"
+                                      onClick={() => toggleDetails(lr.id)}
+                                    >
+                                      {isExpanded ? 'Masquer' : 'Plus d\'infos'}
+                                    </button>
+                                  )}
+                                  <button
+                                    className="btn btn-sm cancel-btn"
+                                    disabled={cancelingId === lr.id || lr.status === 'cancelled' || lr.status === 'rejected' || lr.status === 'approved'}
+                                    onClick={() => handleCancelRequest(lr.id)}
+                                  >
+                                    {cancelingId === lr.id ? 'Annulation...' : 'Annuler'}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="detail-row">
+                                <td colSpan={5}>
+                                  {annualSplit && <div className="detail-line">Répartition : {annualSplit}</div>}
+                                  {lr.status === 'pending' && currentStepLabel && (
+                                    <div className="detail-line">Étape : {currentStepLabel}</div>
+                                  )}
+                                  {rejectionNote && (
+                                    <div className="detail-line" style={{ color: 'var(--danger)' }}>Motif : {rejectionNote}</div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
                         );
                       })}
                     </tbody>

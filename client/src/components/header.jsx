@@ -1,13 +1,62 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useCurrentUser from '../hooks/useCurrentUser';
 import api from './api';
 
 function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
   const [openMenu, setOpenMenu] = useState(false);
+  const [openNotifications, setOpenNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
   const { fullName, role, roleLabel } = useCurrentUser();
+
+  const fetchNotifications = async () => {
+    try {
+      const response = await api.get('/notification');
+      setNotifications(response.data || []);
+    } catch (err) {
+      // silent fail on polling errors
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const load = async () => {
+      try {
+        const response = await api.get('/notification', { skipAuthRedirect: true });
+        if (isMounted) {
+          setNotifications(response.data || []);
+        }
+      } catch (err) {
+        // silent fail on polling errors
+      }
+    };
+
+    load();
+    // Poll every 60 seconds (60000ms) for new notifications
+    const interval = setInterval(load, 60000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleMarkAsRead = async (notificationId, e) => {
+    e.stopPropagation();
+    try {
+      await api.post(`/notification/${notificationId}/read`);
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.notification_id === notificationId ? { ...n, is_read: true } : n
+        )
+      );
+    } catch (err) {
+      console.error('Failed to mark notification as read:', err);
+    }
+  };
 
   async function handleLogout() {
     setLoggingOut(true);
@@ -24,7 +73,9 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
   const currentName = EmployeeName || fullName || '';
   const currentRole = EmployeeRole || role || '';
   const displayedRole = EmployeeRoleLabel || roleLabel || currentRole;
-  const canSeeSupervisorLinks = ['head', 'hr'].includes(currentRole);
+  const canSeeSupervisorLinks = ['head', 'hr', 'admin'].includes(currentRole);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
     <header className="app-header">
@@ -43,11 +94,29 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
         .app-header .icon-btn {
           width: 40px; height: 40px; border: none; background: var(--primary-soft); color: var(--primary);
           display: flex; align-items: center; justify-content: center; border-radius: 10px;
+          position: relative;
         }
         .app-header .icon-btn:disabled { opacity: 0.5; }
-        .app-header .menu-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+        .app-header .badge-counter {
+          position: absolute; top: -4px; right: -4px;
+          background: #DC3545; color: white; border-radius: 10px;
+          padding: 2px 6px; font-size: 0.7rem; font-weight: 700; min-width: 18px; text-align: center;
+          line-height: 1; border: 2px solid white;
+        }
+        .app-header .menu-panel, .app-header .notif-panel {
+          background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+        }
         .app-header .menu-link { display: block; padding: 0.55rem 1rem; color: var(--ink); text-decoration: none; font-size: 0.92rem; }
         .app-header .menu-link:hover { background: var(--primary-soft); }
+        .app-header .notif-panel {
+          width: 320px; max-height: 400px; overflow-y: auto; right: 0; top: 56px; z-index: 1000;
+        }
+        .app-header .notif-item {
+          padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+          transition: background 150ms ease;
+        }
+        .app-header .notif-item.unread { background: #F0F7FF; font-weight: 500; }
+        .app-header .notif-item:last-child { border-bottom: none; }
         .app-header .user-name { color: var(--ink); font-weight: 600; }
         .app-header .user-role { color: var(--muted); font-size: 0.82rem; }
         .app-header .logout-btn {
@@ -69,7 +138,10 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
           <button
             type="button"
             className="icon-btn"
-            onClick={() => setOpenMenu(!openMenu)}
+            onClick={() => {
+              setOpenMenu(!openMenu);
+              setOpenNotifications(false);
+            }}
             aria-label="Menu"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -106,19 +178,79 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
                     </Link>
                   </li>
                 )}
+                {['admin', 'hr'].includes(currentRole) && (
+                  <li>
+                    <Link className="menu-link" to="/admin" onClick={() => setOpenMenu(false)}>
+                      ⚙️ Administration
+                    </Link>
+                  </li>
+                )}
               </ul>
             </nav>
           )}
         </div>
 
-        <div className="d-flex align-items-center gap-3">
-          {/* decorative only, not wired to any notification system */}
-          <button type="button" className="icon-btn" aria-label="Notifications" disabled>
+        <div className="d-flex align-items-center gap-3 position-relative">
+          {/* Notification button with 60s polling */}
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Notifications"
+            onClick={() => {
+              setOpenNotifications(!openNotifications);
+              setOpenMenu(false);
+            }}
+          >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
+            {unreadCount > 0 && (
+              <span className="badge-counter">{unreadCount > 99 ? '99+' : unreadCount}</span>
+            )}
           </button>
+
+          {openNotifications && (
+            <div className="position-absolute notif-panel shadow-sm p-0">
+              <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+                <h6 className="mb-0 fw-bold">Notifications</h6>
+                {unreadCount > 0 && (
+                  <span className="badge bg-danger rounded-pill">{unreadCount} non lue(s)</span>
+                )}
+              </div>
+              <div className="notif-list">
+                {notifications.length === 0 ? (
+                  <div className="p-3 text-center text-muted small">Aucune notification</div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.notification_id}
+                      className={`notif-item ${!notif.is_read ? 'unread' : ''}`}
+                    >
+                      <div className="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                          <p className="mb-1 text-dark">{notif.content}</p>
+                          <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                            {new Date(notif.created_at).toLocaleString()}
+                          </small>
+                        </div>
+                        {!notif.is_read && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
+                            style={{ fontSize: '0.75rem' }}
+                            onClick={(e) => handleMarkAsRead(notif.notification_id, e)}
+                          >
+                            Lu
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="text-end d-none d-sm-block">
             <p className="mb-0 user-name">{currentName}</p>
@@ -146,5 +278,4 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
     </header>
   );
 }
-
 export default Header;

@@ -4,6 +4,7 @@ import Login from './components/login.jsx'
 import Dashboard from './components/dashboard.jsx'
 import UnitDashboard from './components/EmployeesDashboard.jsx'
 import ApprovalInbox from './components/ApprovalInbox.jsx'
+import AdminDashboard from './components/AdminDashboard.jsx'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { loading, user, role } = useCurrentUser();
@@ -29,8 +30,9 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/unit-info" element={<ProtectedRoute allowedRoles={['head', 'hr']}><UnitDashboard /></ProtectedRoute>} />
-        <Route path="/approval-inbox" element={<ProtectedRoute allowedRoles={['head', 'hr']}><ApprovalInbox /></ProtectedRoute>} />
+        <Route path="/unit-info" element={<ProtectedRoute allowedRoles={['head', 'hr', 'admin']}><UnitDashboard /></ProtectedRoute>} />
+        <Route path="/approval-inbox" element={<ProtectedRoute allowedRoles={['head', 'hr', 'admin']}><ApprovalInbox /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'hr']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

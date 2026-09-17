@@ -24,8 +24,7 @@ CREATE TABLE `Employe` (
   `password` varchar(200) NOT NULL,
   `email` varchar(200) NOT NULL UNIQUE,
   `date_entree` date NOT NULL,
-  `role` ENUM ('directeur', 'chef_departement', 'chef_service', 'drh', 'employe') NOT NULL,
-  `forward_drh` bool NOT NULL,
+  `role` ENUM ('admin', 'directeur', 'chef_departement', 'chef_service', 'drh', 'employe') NOT NULL,
   `direction_id` integer,
   `departement_id` integer,
   `service_id` integer,
@@ -33,20 +32,12 @@ CREATE TABLE `Employe` (
   `fonction` varchar(100)
 );
 
-CREATE TABLE `Attendance` (
-  `Emp_id` integer NOT NULL,
-  `attendance_date` date NOT NULL,
-  `attend` bool NOT NULL,
-  PRIMARY KEY (`Emp_id`, `attendance_date`)
-);
-
-
-
 CREATE TABLE `Exercise` (
   `exercise_id` integer PRIMARY KEY AUTO_INCREMENT,
   `Emp_id` integer NOT NULL,
   `year` int NOT NULL,
   `balance` decimal(5,1) NOT NULL,
+
   UNIQUE KEY `uniq_emp_year` (`Emp_id`, `year`)
 );
 
@@ -111,7 +102,7 @@ ALTER TABLE `Employe` ADD FOREIGN KEY (`direction_id`) REFERENCES `Direction` (`
 ALTER TABLE `Employe` ADD FOREIGN KEY (`departement_id`) REFERENCES `Departement` (`id`);
 ALTER TABLE `Employe` ADD FOREIGN KEY (`service_id`) REFERENCES `Service` (`id`);
 
-ALTER TABLE `Attendance` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
+ALTER TABLE `Attendance_count` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
 
 ALTER TABLE `Exercise` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
 

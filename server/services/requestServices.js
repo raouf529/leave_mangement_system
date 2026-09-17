@@ -1,34 +1,6 @@
 const pool = require('../db');
+const { getExerciseYearForDate, calculateLeaveDuration } = require('../utils/helpers');
 
-function getExerciseYearForDate(dateValue) {
-    const date = new Date(dateValue ?? Date.now());
-    const year = date.getFullYear();
-    return date.getMonth() >= 6 ? year : year - 1;
-}
-
-function calculateLeaveDuration(startDate, endDate) {
-    if (!startDate || !endDate) {
-        throw new Error('Start date and end date are required');
-    }
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        throw new Error('Leave dates must be valid');
-    }
-
-    if (start > end) {
-        throw new Error('Start date must be before or equal to the end date');
-    }
-
-    const duration = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-    if (duration <= 0) {
-        throw new Error('Leave duration must be at least one day');
-    }
-
-    return duration;
-}
 
 function computeAnnualExerciseSplit(duration, exercises, currentExerciseYear) {
     const requestedDuration = Number(duration) || 0;
@@ -83,7 +55,7 @@ function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
     return [{
         exercise_id: currentExercise.exercise_id,
         year: Number(currentExercise.year),
-        days_allocated: Math.min(requestedDuration, Number(currentExercise.balance))
+        days_allocated: Math.min(requestedDuration, 30)
     }];
 }
 
@@ -126,6 +98,17 @@ async function applyApprovedAdvanceAllocations(requestId, conn = pool) {
         'SELECT exercise_id, SUM(days_allocated) AS total_days FROM Request_exercise_allocation WHERE request_id = ? GROUP BY exercise_id',
         [requestId]
     );
+
+    for (const allocation of allocations) {
+        const totalDays = Number(allocation.total_days) || 0;
+        if (totalDays <= 0) continue;
+
+        await conn.query(
+            'UPDATE Exercise SET balance = balance - ? WHERE exercise_id = ?',
+            [totalDays, allocation.exercise_id]
+        );
+    }
+
     return allocations;
 }
 
@@ -387,6 +370,30 @@ async function assertStepAccess(stepId, currentUserId, currentUserRole) {
 
     return stepRows[0];
 }
+async function createNotification({ targetId, requestId, content }, connection = null) {
+    if (!targetId || !content) {
+        return;
+    }
+    try {
+        const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const query = 'INSERT INTO Notification (target_id, request_id, content, is_read, created_at) VALUES (?, ?, ?, ?, ?)';
+        const values = [targetId, requestId || null, content, false, currentTimestamp];
+        const runner = connection || pool;
+        await runner.query(query, values);
+    } catch (err) {
+        console.error('Error creating notification:', err.message);
+    }
+}
+
+function getRoleLabel(role) {
+    return {
+        employe: 'employee',
+        chef_service: 'service head',
+        chef_departement: 'department head',
+        directeur: 'director',
+        drh: 'HR manager'
+    }[role] || role || 'user';
+}
 
 const requestService = {
     async createRequest({ employeeId, startDate, endDate, duration, leaveType, reasonType, justification, url, exercise, directToDepartmentHead = false, sendToDepartmentHead = false }) {
@@ -448,9 +455,15 @@ const requestService = {
                 }
             }
 
-
             const shouldSendToDepartmentHead = Boolean(directToDepartmentHead || sendToDepartmentHead);
-            await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection, shouldSendToDepartmentHead);
+            const targetUnit = await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection, shouldSendToDepartmentHead);
+            if (targetUnit && targetUnit.id) {
+                await createNotification({
+                    targetId: targetUnit.id,
+                    requestId: result.insertId,
+                    content: `${employeeRows[0].nom} ${employeeRows[0].prenom} vous a soumis une demande de congé du ${startDate} au ${endDate}.`
+                }, connection);
+            }
             await connection.commit();
             return result.insertId;
         } catch (error) {
@@ -542,12 +555,16 @@ const requestService = {
                     [decision, comment, stepId]
                 );
                 await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['approved', step.request_id]);
-
                 if (requestRows[0].leave_type === 'annual') {
                     await applyApprovedAnnualAllocations(step.request_id);
                 } else if (requestRows[0].leave_type === 'advance') {
                     await applyApprovedAdvanceAllocations(step.request_id);
                 }
+                await createNotification({
+                    targetId: requestRows[0].Emp_id,
+                    requestId: step.request_id,
+                    content: `Votre demande de congé du ${requestRows[0].start_date} a été approuvée.`
+                });
 
                 return { requestId: step.request_id, message: 'Request approved and marked as completed' };
             }
@@ -559,7 +576,22 @@ const requestService = {
             }
 
             const requestId = updatedStepRows[0].request_id;
+            const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
             const targetUnit = await forwardRequestToNextStep(requestId, updatedStepRows[0].target_id, null, null);
+            if (targetUnit) {
+                await createNotification({
+                    targetId: targetUnit.id,
+                    requestId,
+                    content: `Une demande de congé vous a été transmise pour examen par ${targetRows[0]?.nom ?? ''} ${targetRows[0]?.prenom ?? ''}.`
+                });
+            }
+            if (requestRows.length > 0) {
+                await createNotification({
+                    targetId: requestRows[0].Emp_id,
+                    requestId,
+                    content: `Votre demande de congé a été approuvée par ${targetRows[0]?.nom ?? ''} ${targetRows[0]?.prenom ?? ''} et transmise à l'étape suivante.`
+                });
+            }
             return { requestId, targetUnit };
         }
 
@@ -570,7 +602,17 @@ const requestService = {
         }
 
         const requestId = rejectedStepRows[0].request_id;
+        const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
+        if (requestRows.length === 0) {
+            throw new Error(`Request '${requestId}' not found`);
+        }
+
         await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['rejected', requestId]);
+        await createNotification({
+            targetId: requestRows[0].Emp_id,
+            requestId,
+            content: `Votre demande de congé du ${requestRows[0].start_date} a été refusée par ${targetRows[0]?.nom ?? ''} ${targetRows[0]?.prenom ?? ''}.`
+        });
         return { requestId };
     },
     async cancelRequest(requestId, currentUserId, currentUserRole) {
@@ -581,6 +623,33 @@ const requestService = {
         }
 
         await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['cancelled', requestId]);
+
+        // Get employee info for notification message
+        const [empRows] = await pool.query('SELECT nom, prenom FROM Employe WHERE id = ?', [currentUserId]);
+        const empName = empRows.length > 0 ? `${empRows[0].nom} ${empRows[0].prenom}` : 'L\'employé';
+
+        // Notify the owner (employee)
+        await createNotification({
+            targetId: currentUserId,
+            requestId,
+            content: `Votre demande de congé du ${request.start_date} a été annulée avec succès.`
+        });
+
+        // Notify assigned reviewers with pending steps
+        const [pendingSteps] = await pool.query(
+            'SELECT DISTINCT target_id FROM Request_step WHERE request_id = ? AND (decision IS NULL OR decision = "")',
+            [requestId]
+        );
+        for (const step of pendingSteps) {
+            if (Number(step.target_id) !== Number(currentUserId)) {
+                await createNotification({
+                    targetId: step.target_id,
+                    requestId,
+                    content: `La demande de congé de ${empName} du ${request.start_date} a été annulée.`
+                });
+            }
+        }
+
         return { requestId, message: 'Request cancelled successfully' };
     },
     async getRequestDetails(requestId, currentUserId, currentUserRole) {
@@ -593,3 +662,5 @@ module.exports = requestService;
 module.exports.calculateLeaveDuration = calculateLeaveDuration;
 module.exports.computeAnnualExerciseSplit = computeAnnualExerciseSplit;
 module.exports.resolveDepartmentHeadTarget = resolveDepartmentHeadTarget;
+module.exports.applyApprovedAnnualAllocations = applyApprovedAnnualAllocations;
+module.exports.applyApprovedAdvanceAllocations = applyApprovedAdvanceAllocations;

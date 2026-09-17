@@ -1,35 +1,6 @@
 const pool = require('../db');
+const { mapRole, getRoleLabel, getEmployeeUnit } = require('../utils/helpers');
 
-function mapRole(role) {
-    if (role === 'drh') return 'hr';
-    if (['directeur', 'chef_departement', 'chef_service'].includes(role)) return 'head';
-    if (role === 'employe') return 'employee';
-    return role;
-}
-
-function getRoleLabel(role) {
-    const labels = {
-        directeur: 'Directeur',
-        chef_departement: 'Chef de département',
-        chef_service: 'Chef de service',
-        drh: 'Ressources humaines',
-        employe: 'Employé'
-    };
-    return labels[role] ?? role;
-}
-
-function getEmployeeUnit(employee) {
-    if (employee.service_id !== null) {
-        return { id: employee.service_id, name: employee.service_name, type: 'service' };
-    }
-    if (employee.departement_id !== null) {
-        return { id: employee.departement_id, name: employee.departement_name, type: 'department' };
-    }
-    if (employee.direction_id !== null) {
-        return { id: employee.direction_id, name: employee.direction_name, type: 'direction' };
-    }
-    return null;
-}
 
 const profileService = {
     async getEmployeeProfile(employeeId) {

@@ -1,34 +1,8 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../db');
-
-function generatePassword() {
-    const length = 8;
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+';
-    let password = '';
-    for (let i = 0; i < length; i++) {
-        password += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return password;
-}
-
-function mapRole(role) {
-    if (role === 'drh') return 'hr';
-    if (['directeur', 'chef_departement', 'chef_service'].includes(role)) return 'head';
-    if (role === 'employe') return 'employee';
-    return role;
-}
-
-function getRoleLabel(role) {
-    const labels = {
-        directeur: 'Directeur',
-        chef_departement: 'Chef de département',
-        chef_service: 'Chef de service',
-        drh: 'Ressources humaines',
-        employe: 'Employé'
-    };
-    return labels[role] ?? role;
-}
+const { mapRole, getRoleLabel } = require('../utils/helpers');
+const { getEmployeeById } = require('../utils/dbUtils');
 
 function verifyRefreshToken(token) {
     return jwt.verify(
@@ -78,11 +52,7 @@ const authService = {
     // Used by the refresh endpoint to rebuild a fresh access token payload
     // (role/unit could have changed since the refresh token was issued).
     async getEmployeeById(id) {
-        const [users] = await pool.query('SELECT * FROM Employe WHERE id = ?', [id]);
-        if (users.length === 0) {
-            throw new Error('User not found');
-        }
-        return users[0];
+        return getEmployeeById(id);
     },
 
     verifyRefreshToken,

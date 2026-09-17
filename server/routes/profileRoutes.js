@@ -5,8 +5,8 @@ const { authenticateToken, authorizeRoles, authorizeProfileAccess } = require('.
 const router = express.Router();
 
 router.get('/me', authenticateToken, profileController.getProfile);
-router.get('/me/underemployees', authenticateToken, authorizeRoles('head', 'hr'), profileController.getUnderemployees);
-router.get('/all', authenticateToken, authorizeRoles('head', 'hr'), profileController.getAllEmployees);
+router.get('/me/underemployees', authenticateToken, authorizeRoles('head', 'hr', 'admin'), profileController.getUnderemployees);
+router.get('/all', authenticateToken, authorizeRoles('head', 'hr', 'admin'), profileController.getAllEmployees);
 router.get('/:id', authenticateToken, authorizeProfileAccess, profileController.getProfile);
 router.put('/:id', authenticateToken, profileController.updateProfile);
 

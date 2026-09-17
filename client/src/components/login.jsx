@@ -16,8 +16,23 @@ function Login() {
     try {
       // withCredentials lets the browser accept/send the httpOnly cookies
       // the server sets — no tokens ever touch JS or localStorage.
-      await api.post('/auth/login', { email, password });
-      navigate('/dashboard');
+      const res = await api.post('/auth/login', { email, password });
+      let role = res.data?.role;
+
+      if (!role) {
+        try {
+          const meRes = await api.get('/auth/me');
+          role = meRes.data?.role;
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      if (role === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       setError('Email ou mot de passe incorrect');
     } finally {

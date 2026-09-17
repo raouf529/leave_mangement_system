@@ -22,7 +22,7 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !error.config?.skipAuthRedirect) {
       // sessionStorage role is a UI convenience only — the server is the
       // real authority on role/permissions. Clear it on auth failure so
       // stale UI never implies access that no longer holds.

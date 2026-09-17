@@ -49,12 +49,12 @@ const authController = {
     async loginEmployee(req, res) {
         try {
             const { email, password } = req.body;
-            const { accessToken, refreshToken } = await authService.loginEmployee({ email, password });
+            const { accessToken, refreshToken, role, roleLabel } = await authService.loginEmployee({ email, password });
 
             res.cookie('accessToken', accessToken, ACCESS_COOKIE_OPTS);
             res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTS);
 
-            res.status(200).json({ message: 'Login successful' });
+            res.status(200).json({ message: 'Login successful', role, roleLabel });
         } catch (error) {
             res.status(400).json({ error: error.message });
         }
