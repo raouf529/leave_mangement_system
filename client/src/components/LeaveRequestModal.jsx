@@ -99,6 +99,27 @@ function LeaveRequestModal({ onClose, onSuccess }) {
       setError('Veuillez sélectionner des dates valides.');
       return;
     }
+
+    if (currentUser?.leaveRequests) {
+      const newStart = new Date(startDate);
+      const newEnd = new Date(endDate);
+      const approvedOverlap = currentUser.leaveRequests.find((lr) => {
+        if (lr.status !== 'approved') return false;
+        const startDateStr = lr.startDate ? String(lr.startDate).split('T')[0] : '';
+        if (!startDateStr) return false;
+        const existingStart = new Date(startDateStr);
+        const existingEnd = new Date(existingStart);
+        existingEnd.setDate(existingEnd.getDate() + Number(lr.duration) - 1);
+        return newStart <= existingEnd && newEnd >= existingStart;
+      });
+
+      if (approvedOverlap) {
+        const overlapStart = String(approvedOverlap.startDate).split('T')[0];
+        setError(`La période sélectionnée chevauche un congé déjà approuvé (du ${new Date(overlapStart).toLocaleDateString('fr-FR')} pour ${approvedOverlap.duration} jour(s)).`);
+        return;
+      }
+    }
+
     if (needsJustification && !justification.trim()) {
       setError('Une justification est requise pour ce type de congé.');
       return;

@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
 import Header from './header';
@@ -74,6 +74,13 @@ function getEndDate(startDate, duration) {
   return d;
 }
 
+function getCurrentStepLabel(lr) {
+  if (!lr?.currentStep) return null;
+  if (lr.currentStep.kind === 'hr') return 'HR';
+  if (lr.currentStep.kind === 'unit') return `${lr.currentStep.unitName ?? 'Unité'} (${lr.currentStep.unitType ?? 'unit'})`;
+  return lr.currentStep.targetName;
+}
+
 function StatusBadge({ status }) {
   const style = STATUS_STYLES[status] ?? STATUS_STYLES.cancelled;
   return (
@@ -91,26 +98,35 @@ function Dashboard() {
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [cancelingId, setCancelingId] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  
+  // Filters for request history
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterActive, setFilterActive] = useState(false);
+
   const navigate = useNavigate();
+
+  const [confirmCancelRequest, setConfirmCancelRequest] = useState(null);
 
   function toggleDetails(requestId) {
     setExpandedId((prev) => (prev === requestId ? null : requestId));
   }
 
-  async function handleCancelRequest(requestId) {
+  function promptCancel(request) {
+    setConfirmCancelRequest(request);
+  }
+
+  async function handleConfirmCancel() {
+    if (!confirmCancelRequest) return;
+    const requestId = confirmCancelRequest.id;
     setCancelingId(requestId);
     try {
       await cancelRequest(requestId);
-      setEmployeeInfo((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          leaveRequests: prev.leaveRequests.map((request) =>
-            request.id === requestId ? { ...request, status: 'cancelled' } : request
-          )
-        };
-      });
+      // Refetch employee profile to refresh balance & request list correctly
+      const updatedInfo = await getInformation();
+      setEmployeeInfo(updatedInfo);
       setError('');
+      setConfirmCancelRequest(null);
     } catch (err) {
       console.error('Error cancelling request:', err);
       setError(err.response?.data?.error ?? 'Impossible d\'annuler cette demande.');
@@ -132,15 +148,73 @@ function Dashboard() {
       }
     }
     fetchData();
+
+    // Logout does a hard window.location.replace('/'), which makes this
+    // page's prior document instance bfcache-eligible. If the user then
+    // hits Forward, the browser can restore that old instance instead of
+    // remounting -> no refetch, stale authenticated content briefly shown.
+    // Re-verify on that restore; a 401 here gets the axios interceptor to
+    // redirect to '/'.
+    function handlePageShow(event) {
+      if (event.persisted) fetchData();
+    }
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      window.removeEventListener('pageshow', handlePageShow);
+    };
   }, []);
 
   const activeExercises = (employeeInfo?.exercises ?? []).filter(
     (ex) => Number(ex.balance) > 0
   );
-  const leaveRequests = employeeInfo?.leaveRequests ?? [];
-  const annualSplitRequests = leaveRequests.filter(
-    (lr) => lr.leaveType === 'annual' && (lr.status === 'pending' || lr.status === 'approved')
-  );
+  const rawRequests = employeeInfo?.leaveRequests ?? [];
+  // Sort from oldest to newest using created_at (or id as fallback)
+  const leaveRequests = [...rawRequests].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
+    return timeA - timeB;
+  });
+
+  // Last request is the newest request based on created_at
+  const lastRequest = rawRequests.length > 0
+    ? [...rawRequests].sort((a, b) => {
+        const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
+        const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
+        return timeB - timeA;
+      })[0]
+    : null;
+
+  const filteredLeaveRequests = useMemo(() => {
+    return leaveRequests.filter((lr) => {
+      // Status filter
+      if (filterStatus !== 'all' && lr.status !== filterStatus) return false;
+      
+      // Active leave filter
+      if (filterActive) {
+        if (lr.status !== 'approved') return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // ignore time for comparison
+        const start = new Date(lr.startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = getEndDate(lr.startDate, lr.duration);
+        if (end) end.setHours(23, 59, 59, 999);
+        if (today < start || (end && today > end)) return false;
+      }
+      
+      // Start date filter (exact match)
+      if (filterStartDate) {
+        // Just compare the YYYY-MM-DD strings
+        const lrDateStr = new Date(lr.startDate).toISOString().split('T')[0];
+        if (lrDateStr !== filterStartDate) return false;
+      }
+      
+      return true;
+    });
+  }, [leaveRequests, filterStatus, filterActive, filterStartDate]);
+
+  const lastRequestEndDate = lastRequest ? getEndDate(lastRequest.startDate, lastRequest.duration) : null;
+  const lastRequestStepLabel = getCurrentStepLabel(lastRequest);
   const totalBalance = activeExercises.reduce((sum, ex) => sum + Number(ex.balance || 0), 0);
 
   return (
@@ -182,8 +256,38 @@ function Dashboard() {
         .history-table td { padding-top: 1rem; padding-bottom: 1rem; }
         .info-btn { border: 1px solid var(--border); background: #fff; color: var(--primary); font-size: 0.88rem; }
         .detail-row td { background: var(--canvas); border-top: none; padding-top: 0.9rem; padding-bottom: 1.1rem; font-size: 0.92rem; }
-        .detail-row .detail-line { margin-bottom: 0.35rem; }
-        .detail-row .detail-line:last-child { margin-bottom: 0; }
+        .detail-grid { display: flex; flex-direction: column; gap: 0.65rem; }
+        .detail-item { display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; align-items: baseline; }
+        .detail-label { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); min-width: 130px; }
+        .detail-value { font-size: 0.92rem; color: var(--ink); }
+        .last-request-card { border-left-width: 4px; border-left-style: solid; }
+        .last-request-label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+        .custom-modal-backdrop {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(15, 23, 42, 0.45);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1050;a
+        }
+        .custom-modal {
+          background: #fff;
+          border-radius: 16px;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          max-width: 480px;
+          width: 90%;
+          overflow: hidden;
+          animation: modalAppear 0.2s ease-out;
+        }
+        @keyframes modalAppear {
+          from { opacity: 0; transform: scale(0.96); }
+          to { opacity: 1; transform: scale(1); }
+        }
       `}</style>
 
       <Header
@@ -223,6 +327,71 @@ function Dashboard() {
           <div className="text-center py-5" style={{ color: 'var(--muted)' }}>Chargement...</div>
         ) : (
           <>
+            <section
+              className="section-card p-4 p-md-5 mb-4 last-request-card"
+              style={{ borderLeftColor: lastRequest ? (STATUS_STYLES[lastRequest.status]?.fg ?? 'var(--border)') : 'var(--border)' }}
+            >
+              <p className="last-request-label mb-2">Dernière demande</p>
+              {!lastRequest ? (
+                <p className="muted-note mb-0">Aucune demande de congé pour le moment.</p>
+              ) : (
+                <>
+                  <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                    <h2 className="section-title mb-0">{LEAVE_TYPE_LABELS[lastRequest.leaveType] ?? lastRequest.leaveType}</h2>
+                    <StatusBadge status={lastRequest.status} />
+                  </div>
+
+                  <div className="row g-3 mb-3">
+                    <div className="col-12 col-sm-6 col-md-4">
+                      <p className="hero-label mb-1">Dates</p>
+                      <p className="fw-medium mb-0">
+                        {formatDate(lastRequest.startDate)}
+                        {lastRequestEndDate ? ` → ${formatDate(lastRequestEndDate)}` : ''}
+                      </p>
+                    </div>
+                    <div className="col-12 col-sm-6 col-md-4">
+                      <p className="hero-label mb-1">Durée</p>
+                      <p className="fw-medium mb-0">{lastRequest.duration} j</p>
+                    </div>
+                    {lastRequest.status === 'pending' && lastRequestStepLabel && (
+                      <div className="col-12 col-md-4">
+                        <p className="hero-label mb-1">Étape actuelle</p>
+                        <p className="fw-medium mb-0">{lastRequestStepLabel}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {lastRequest.status === 'rejected' && (
+                    <div
+                      className="p-3 mb-3 rounded-3"
+                      style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: '0.92rem' }}
+                    >
+                      <strong>Motif du refus :</strong> {lastRequest.rejectionReason || 'Aucune raison détaillée.'}
+                    </div>
+                  )}
+
+                  {['annual', 'advance'].includes(lastRequest.leaveType) && lastRequest.allocations?.length > 0 && (
+                    <div className="mb-3">
+                      <p className="hero-label mb-2">Répartition</p>
+                      <div className="split-list">
+                        {lastRequest.allocations.map((a, i) => (
+                          <div key={i} className="mb-1">Exercice {a.year} : {a.daysAllocated} j</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    className="btn btn-sm cancel-btn"
+                    disabled={cancelingId === lastRequest.id || lastRequest.status === 'cancelled' || lastRequest.status === 'rejected'}
+                    onClick={() => promptCancel(lastRequest)}
+                  >
+                    {cancelingId === lastRequest.id ? 'Annulation...' : 'Annuler cette demande'}
+                  </button>
+                </>
+              )}
+            </section>
+
             <section className="section-card p-4 p-md-5 mb-4">
               <h2 className="section-title mb-4">Exercices</h2>
               {activeExercises.length === 0 ? (
@@ -252,46 +421,27 @@ function Dashboard() {
               )}
             </section>
 
-            <section className="section-card p-4 p-md-5 mb-4">
-              <h2 className="section-title mb-4">Répartition du congé annuel</h2>
-              {annualSplitRequests.length === 0 ? (
-                <p className="muted-note mb-0">
-                  Aucune demande annuelle active pour afficher une répartition.
-                </p>
-              ) : (
-                <div className="row g-3">
-                  {annualSplitRequests.map((request) => {
-                    const allocations = request.allocations ?? [];
-                    return (
-                      <div key={request.id} className="col-12 col-lg-6">
-                        <div className="exercise-card h-100">
-                          <div className="d-flex justify-content-between align-items-center mb-2">
-                            <strong>Demande du {formatDate(request.startDate)}</strong>
-                            <span className="muted-note">{request.duration} j</span>
-                          </div>
-                          {allocations.length > 0 ? (
-                            <div className="split-list">
-                              {allocations.map((a, i) => (
-                                <div key={i} className="mb-1">
-                                  Exercice {a.year} : {a.daysAllocated} j
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="muted-note mb-0">Aucune allocation enregistrée.</p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
             <section className="section-card p-4 p-md-5">
-              <h2 className="section-title mb-4">Historique des demandes</h2>
-              {leaveRequests.length === 0 ? (
-                <p className="muted-note mb-0">Aucune demande de congé pour le moment.</p>
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                <h2 className="section-title mb-0">Historique des demandes</h2>
+                <div className="d-flex flex-wrap gap-2 align-items-center">
+                  <div className="form-check form-switch me-2 d-flex align-items-center gap-2" style={{ margin: 0 }}>
+                    <input className="form-check-input mt-0" type="checkbox" role="switch" id="activeLeaveSwitch" checked={filterActive} onChange={(e) => setFilterActive(e.target.checked)} />
+                    <label className="form-check-label small fw-medium" htmlFor="activeLeaveSwitch">Congés actifs</label>
+                  </div>
+                  <input type="date" className="form-control filter-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} style={{ width: '150px' }} title="Date de début exacte" />
+                  <select className="form-select filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ width: '150px' }}>
+                    <option value="all">Tous statuts</option>
+                    <option value="pending">En attente</option>
+                    <option value="approved">Approuvée</option>
+                    <option value="rejected">Refusée</option>
+                    <option value="cancelled">Annulée</option>
+                    <option value="time out">Expirée</option>
+                  </select>
+                </div>
+              </div>
+              {filteredLeaveRequests.length === 0 ? (
+                <p className="muted-note mb-0">Aucune demande de congé correspondante.</p>
               ) : (
                 <div className="table-responsive">
                   <table className="history-table table align-middle mb-0">
@@ -305,15 +455,9 @@ function Dashboard() {
                       </tr>
                     </thead>
                     <tbody>
-                      {leaveRequests.map((lr) => {
+                      {filteredLeaveRequests.map((lr) => {
                         const endDate = getEndDate(lr.startDate, lr.duration);
-                        const currentStepLabel = lr.currentStep
-                          ? lr.currentStep.kind === 'hr'
-                            ? 'HR'
-                            : lr.currentStep.kind === 'unit'
-                              ? `${lr.currentStep.unitName ?? 'Unité'} (${lr.currentStep.unitType ?? 'unit'})`
-                              : lr.currentStep.targetName
-                          : null;
+                        const currentStepLabel = getCurrentStepLabel(lr);
                         const rejectionNote = lr.status === 'rejected' ? (lr.rejectionReason || 'Aucune raison détaillée.') : null;
                         const annualSplit = lr.leaveType === 'annual' && lr.allocations?.length
                           ? lr.allocations.map((allocation) => `Exercice ${allocation.year} : ${allocation.daysAllocated} j`).join(' · ')
@@ -343,8 +487,8 @@ function Dashboard() {
                                   )}
                                   <button
                                     className="btn btn-sm cancel-btn"
-                                    disabled={cancelingId === lr.id || lr.status === 'cancelled' || lr.status === 'rejected' || lr.status === 'approved'}
-                                    onClick={() => handleCancelRequest(lr.id)}
+                                    disabled={cancelingId === lr.id || lr.status === 'cancelled' || lr.status === 'rejected'}
+                                    onClick={() => promptCancel(lr)}
                                   >
                                     {cancelingId === lr.id ? 'Annulation...' : 'Annuler'}
                                   </button>
@@ -354,13 +498,26 @@ function Dashboard() {
                             {isExpanded && (
                               <tr className="detail-row">
                                 <td colSpan={5}>
-                                  {annualSplit && <div className="detail-line">Répartition : {annualSplit}</div>}
-                                  {lr.status === 'pending' && currentStepLabel && (
-                                    <div className="detail-line">Étape : {currentStepLabel}</div>
-                                  )}
-                                  {rejectionNote && (
-                                    <div className="detail-line" style={{ color: 'var(--danger)' }}>Motif : {rejectionNote}</div>
-                                  )}
+                                  <div className="detail-grid">
+                                    {annualSplit && (
+                                      <div className="detail-item">
+                                        <span className="detail-label">Répartition</span>
+                                        <span className="detail-value">{annualSplit}</span>
+                                      </div>
+                                    )}
+                                    {lr.status === 'pending' && currentStepLabel && (
+                                      <div className="detail-item">
+                                        <span className="detail-label">Étape actuelle</span>
+                                        <span className="detail-value">{currentStepLabel}</span>
+                                      </div>
+                                    )}
+                                    {rejectionNote && (
+                                      <div className="detail-item">
+                                        <span className="detail-label">Motif du refus</span>
+                                        <span className="detail-value" style={{ color: 'var(--danger)' }}>{rejectionNote}</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             )}
@@ -376,14 +533,73 @@ function Dashboard() {
         )}
       </main>
 
+      {confirmCancelRequest && (
+        <div className="custom-modal-backdrop" onClick={() => setConfirmCancelRequest(null)}>
+          <div className="custom-modal p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="d-flex align-items-center gap-3 mb-3">
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  background: 'var(--danger-soft)',
+                  color: 'var(--danger)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.25rem',
+                  fontWeight: 'bold',
+                  flexShrink: 0
+                }}
+              >
+                ⚠️
+              </div>
+              <h5 className="mb-0 fw-bold">Confirmer l'annulation</h5>
+            </div>
+            
+            <p className="mb-3 text-secondary" style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>
+              Êtes-vous sûr de vouloir annuler cette demande de congé ?
+            </p>
+
+            {confirmCancelRequest.status === 'approved' && (
+              <div
+                className="p-3 mb-3 rounded-3"
+                style={{ background: 'var(--amber-soft)', border: '1px solid var(--accent-amber)', color: '#795000', fontSize: '0.9rem' }}
+              >
+                <strong>Attention :</strong> Cette demande est déjà <strong>approuvée</strong>.
+                Si vous l'annulez, l'annulation repartira du début dans la chaîne de validation (circuit de signature), et le solde de jours ne sera restitué qu'une fois l'annulation validée.
+              </div>
+            )}
+
+            <div className="d-flex justify-content-end gap-2 mt-4">
+              <button
+                type="button"
+                className="btn btn-light px-4"
+                onClick={() => setConfirmCancelRequest(null)}
+                disabled={Boolean(cancelingId)}
+              >
+                Retour
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger px-4"
+                onClick={handleConfirmCancel}
+                disabled={Boolean(cancelingId)}
+              >
+                {cancelingId ? 'Annulation...' : 'Confirmer l\'annulation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showRequestModal && (
         <LeaveRequestModal
           onClose={() => setShowRequestModal(false)}
-          onSuccess={() => window.location.reload()} // simplest refresh; swap for a refetch call later
+          onSuccess={() => window.location.reload()}
         />
       )}
     </div>
-    
   );
 }
 

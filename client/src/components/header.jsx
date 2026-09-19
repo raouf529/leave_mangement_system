@@ -178,10 +178,10 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
                     </Link>
                   </li>
                 )}
-                {['admin', 'hr'].includes(currentRole) && (
+                {currentRole === 'admin' && (
                   <li>
                     <Link className="menu-link" to="/admin" onClick={() => setOpenMenu(false)}>
-                      ⚙️ Administration
+                      Administration
                     </Link>
                   </li>
                 )}

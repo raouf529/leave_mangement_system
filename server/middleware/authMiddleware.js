@@ -132,7 +132,7 @@ const authorizeProfileAccess = (req, res, next) => {
             return next();
         }
 
-        if (['head', 'hr'].includes(req.user.role)) {
+        if (['head', 'hr', 'admin'].includes(req.user.role)) {
             return next();
         }
 

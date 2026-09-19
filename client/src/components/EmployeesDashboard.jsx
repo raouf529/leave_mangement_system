@@ -103,6 +103,11 @@ function EmployeesDashboard() {
   const [detailError, setDetailError] = useState('');
   const detailRequestRef = useRef(0);
 
+  // Filters for employee's request history
+  const [detailFilterStatus, setDetailFilterStatus] = useState('all');
+  const [detailFilterStartDate, setDetailFilterStartDate] = useState('');
+  const [detailFilterActive, setDetailFilterActive] = useState(false);
+
   useEffect(() => {
     async function fetchList() {
       try {
@@ -184,6 +189,33 @@ function EmployeesDashboard() {
 
   const activeExercises = (detail?.exercises ?? []).filter((ex) => Number(ex.balance) > 0);
   const leaveRequests = detail?.leaveRequests ?? [];
+
+  const filteredLeaveRequests = useMemo(() => {
+    return leaveRequests.filter((lr) => {
+      // Status filter
+      if (detailFilterStatus !== 'all' && lr.status !== detailFilterStatus) return false;
+      
+      // Active leave filter
+      if (detailFilterActive) {
+        if (lr.status !== 'approved') return false;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const start = new Date(lr.startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = getEndDate(lr.startDate, lr.duration);
+        if (end) end.setHours(23, 59, 59, 999);
+        if (today < start || (end && today > end)) return false;
+      }
+      
+      // Start date filter (exact match)
+      if (detailFilterStartDate) {
+        const lrDateStr = new Date(lr.startDate).toISOString().split('T')[0];
+        if (lrDateStr !== detailFilterStartDate) return false;
+      }
+      
+      return true;
+    });
+  }, [leaveRequests, detailFilterStatus, detailFilterActive, detailFilterStartDate]);
 
   return (
     <div className="leave-dashboard">
@@ -389,9 +421,26 @@ function EmployeesDashboard() {
                     </div>
                   )}
 
-                  <h3 className="section-title mb-3">Historique des demandes</h3>
-                  {leaveRequests.length === 0 ? (
-                    <p className="muted-note mb-0">Aucune demande de congé.</p>
+                  <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                    <h3 className="section-title mb-0">Historique des demandes</h3>
+                    <div className="d-flex flex-wrap gap-2 align-items-center">
+                      <div className="form-check form-switch me-2 d-flex align-items-center gap-2" style={{ margin: 0 }}>
+                        <input className="form-check-input mt-0" type="checkbox" role="switch" id="empActiveLeaveSwitch" checked={detailFilterActive} onChange={(e) => setDetailFilterActive(e.target.checked)} />
+                        <label className="form-check-label small fw-medium" htmlFor="empActiveLeaveSwitch">Congés actifs</label>
+                      </div>
+                      <input type="date" className="form-control filter-input" value={detailFilterStartDate} onChange={(e) => setDetailFilterStartDate(e.target.value)} style={{ width: '150px' }} title="Date de début exacte" />
+                      <select className="form-select filter-select" value={detailFilterStatus} onChange={(e) => setDetailFilterStatus(e.target.value)} style={{ width: '150px' }}>
+                        <option value="all">Tous statuts</option>
+                        <option value="pending">En attente</option>
+                        <option value="approved">Approuvée</option>
+                        <option value="rejected">Refusée</option>
+                        <option value="cancelled">Annulée</option>
+                        <option value="time out">Expirée</option>
+                      </select>
+                    </div>
+                  </div>
+                  {filteredLeaveRequests.length === 0 ? (
+                    <p className="muted-note mb-0">Aucune demande de congé correspondante.</p>
                   ) : (
                     <div className="table-responsive">
                       <table className="table align-middle">
@@ -404,7 +453,7 @@ function EmployeesDashboard() {
                           </tr>
                         </thead>
                         <tbody>
-                          {leaveRequests.map((lr) => {
+                          {filteredLeaveRequests.map((lr) => {
                             const endDate = getEndDate(lr.startDate, lr.duration);
                             return (
                               <tr key={lr.id}>

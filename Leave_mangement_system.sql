@@ -37,7 +37,7 @@ CREATE TABLE `Exercise` (
   `Emp_id` integer NOT NULL,
   `year` int NOT NULL,
   `balance` decimal(5,1) NOT NULL,
-
+  `created_at` date Not NULL,
   UNIQUE KEY `uniq_emp_year` (`Emp_id`, `year`)
 );
 
@@ -52,6 +52,7 @@ CREATE TABLE `Leave_request` (
   `justification` varchar(500),
   `url_justification` varchar(200),
   `request_status` varchar(200) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `chk_exceptional_requires_reason`
     CHECK (
       (`leave_type` = 'exceptional' AND `reason_type` IS NOT NULL)

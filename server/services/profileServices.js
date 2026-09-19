@@ -109,6 +109,7 @@ const profileService = {
                             ? `${currentStep.unit_name ?? 'Unité'} (${currentStep.unit_type ?? 'unit'})`
                             : `${currentStep.prenom ?? ''} ${currentStep.nom ?? ''}`.trim() || 'Responsable'
                     : null;
+                const created_at = lr.created_at;
 
                 return {
                     id: lr.request_id,

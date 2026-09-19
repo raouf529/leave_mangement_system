@@ -46,8 +46,10 @@ const backgroundService = {
                     );
 
                     if (existingExercise.length === 0) {
+                        // INSERT IGNORE: if admin created this row concurrently, silently skip instead of erroring.
+                        // Requires a UNIQUE key on (Emp_id, year) in Exercise to actually take effect.
                         await pool.query(
-                            `INSERT INTO Exercise (Emp_id, year, balance) VALUES (?, ?, 0)`,
+                            `INSERT IGNORE INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, 0, NOW())`,
                             [employee.id, exerciseYear]
                         );
                     }
@@ -57,7 +59,7 @@ const backgroundService = {
             throw new Error('Error creating new exercise: ' + error.message);
         }
     },
-    // Executed on the 28th of each month:
+    // Executed on the 1st of each month:
     // Adds 2.5 balance for each employee (calculates pro-rated balance for newly recruited employees in their first month).
     async updateExerciseBalances() {
         try {
@@ -80,23 +82,17 @@ const backgroundService = {
                     balanceToAdd = assignBalance(attendedDays);
                 }
 
-                // Ensure an Exercise record exists for this exercise year and add balance
-                const [existingExercise] = await pool.query(
-                    `SELECT exercise_id FROM Exercise WHERE Emp_id = ? AND year = ?`,
+                // Ensure an Exercise record exists for this exercise year, then add the balance.
+                // INSERT IGNORE + always-UPDATE is safe whether or not admin already created the row
+                // concurrently (requires a UNIQUE key on (Emp_id, year) in Exercise to actually dedupe).
+                await pool.query(
+                    `INSERT IGNORE INTO Exercise (Emp_id, year, balance) VALUES (?, ?, 0)`,
                     [employee.id, exerciseYear]
                 );
-
-                if (existingExercise.length === 0) {
-                    await pool.query(
-                        `INSERT INTO Exercise (Emp_id, year, balance) VALUES (?, ?, ?)`,
-                        [employee.id, exerciseYear, balanceToAdd]
-                    );
-                } else {
-                    await pool.query(
-                        `UPDATE Exercise SET balance = balance + ? WHERE Emp_id = ? AND year = ?`,
-                        [balanceToAdd, employee.id, exerciseYear]
-                    );
-                }
+                await pool.query(
+                    `UPDATE Exercise SET balance = balance + ? WHERE Emp_id = ? AND year = ?`,
+                    [balanceToAdd, employee.id, exerciseYear]
+                );
 
                 // Create notification for employee
                 await createNotification({
@@ -113,13 +109,19 @@ const backgroundService = {
 
 backgroundService.autoupdateExercse = backgroundService.updateExerciseBalances;
 
-if (cron) {
-    cron.schedule('0 0 1 7 *', () => {
-        backgroundService.createNewExercise().catch((error) => console.error('Exercise creation failed:', error.message));
-    });
+// Runs on the 1st of every month. In July (fiscal year start), also creates the
+// new exercise-year rows before crediting the monthly balance.
+backgroundService.runMonthlyJob = async function runMonthlyJob() {
+    const now = new Date();
+    if (now.getMonth() === 6) { // July, JS months are 0-indexed
+        await backgroundService.createNewExercise();
+    }
+    await backgroundService.updateExerciseBalances();
+};
 
-    cron.schedule('0 0 28 * *', () => {
-        backgroundService.updateExerciseBalances().catch((error) => console.error('Exercise balance update failed:', error.message));
+if (cron) {
+    cron.schedule('0 0 1 * *', () => {
+        backgroundService.runMonthlyJob().catch((error) => console.error('Monthly exercise job failed:', error.message));
     });
 }
 
@@ -127,4 +129,3 @@ module.exports = backgroundService;
 module.exports.getExerciseYearForDate = getExerciseYearForDate;
 module.exports.getExerciseWindowForDate = getExerciseWindowForDate;
 module.exports.assignBalance = assignBalance;
-

@@ -55,7 +55,7 @@ function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
     return [{
         exercise_id: currentExercise.exercise_id,
         year: Number(currentExercise.year),
-        days_allocated: Math.min(requestedDuration, 30)
+        days_allocated: requestedDuration
     }];
 }
 
@@ -110,6 +110,46 @@ async function applyApprovedAdvanceAllocations(requestId, conn = pool) {
     }
 
     return allocations;
+}
+
+async function refundApprovedAllocations(requestId, daysToRefund, conn = pool) {
+    if (daysToRefund <= 0) {
+        return;
+    }
+
+    // Refund starting from the most recently-used exercise first: for a multi-exercise
+    // annual split (oldest exercise filled first), the last exercise filled covers the
+    // later portion of the leave, which lines up with the not-yet-taken days being refunded.
+    const [allocations] = await conn.query(
+        `SELECT ra.exercise_id, SUM(ra.days_allocated) AS total_days
+         FROM Request_exercise_allocation ra
+         JOIN Exercise e ON e.exercise_id = ra.exercise_id
+         WHERE ra.request_id = ?
+         GROUP BY ra.exercise_id
+         ORDER BY e.year DESC`,
+        [requestId]
+    );
+
+    let remaining = daysToRefund;
+    for (const allocation of allocations) {
+        if (remaining <= 0) break;
+
+        const allocated = Number(allocation.total_days) || 0;
+        if (allocated <= 0) continue;
+
+        const refundFromThis = Math.min(remaining, allocated);
+
+        await conn.query(
+            'UPDATE Exercise SET balance = balance + ? WHERE exercise_id = ?',
+            [refundFromThis, allocation.exercise_id]
+        );
+        await conn.query(
+            'UPDATE Request_exercise_allocation SET days_allocated = days_allocated - ? WHERE request_id = ? AND exercise_id = ?',
+            [refundFromThis, requestId, allocation.exercise_id]
+        );
+
+        remaining -= refundFromThis;
+    }
 }
 
 async function createAnnualExerciseRequest(requestId, conn = pool) {
@@ -199,7 +239,7 @@ async function getEmployeeUnit(employeeId, conn = pool) {
 async function getParentUnit(unitId, conn = pool) {
     const unit = typeof unitId === 'object' ? unitId : await getEmployeeUnit(unitId, conn);
     if (unit.type === 'direction') {
-        return null; // This unit has no parent
+        return null; 
     }
 
     if (unit.type === 'service' && unit.departement_id !== null) {
@@ -265,25 +305,29 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
         throw new Error(`Employee '${currentlocation_id}' not found`);
     }
 
+    const currentEmp = row[0];
     const unitRow = await getEmployeeUnit(currentlocation_id, conn);
     const nextStepOrder = await getNextStepOrder(requestId);
 
     let targetUnit;
 
-    if (row[0].role === 'employe') {
+    if (currentEmp.role === 'employe') {
         if (directToDepartmentHead) {
-            const departmentUnit = unitRow.type === 'department'
-                ? unitRow
-                : unitRow.departement_id !== null
-                    ? await getDepartement(unitRow.departement_id, conn)
-                    : null;
-            if (!departmentUnit) {
-                throw new Error(`No department found for employee '${currentlocation_id}'`);
+            // Bypass service head (if any) and go straight to department head (or director if employee belongs directly to direction)
+            let deptHead = null;
+            if (unitRow.type === 'department') {
+                deptHead = await getHeadingUnit(unitRow, conn);
+            } else if (unitRow.type === 'service' && unitRow.departement_id !== null) {
+                const departmentUnit = await getDepartement(unitRow.departement_id, conn);
+                deptHead = await getHeadingUnit(departmentUnit, conn);
+            } else if (unitRow.type === 'direction') {
+                deptHead = await getHeadingUnit(unitRow, conn);
             }
-            targetUnit = await getHeadingUnit(departmentUnit, conn);
-            if (!targetUnit) {
-                throw new Error(`No department head found for unit '${departmentUnit.unit_id}'`);
+
+            if (!deptHead) {
+                throw new Error(`No department/direction head found for employee '${currentlocation_id}'`);
             }
+            targetUnit = deptHead;
             await conn.query(
                 'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
                 [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
@@ -291,7 +335,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             return targetUnit;
         }
 
-        // Forward to the employee's head
+        // Standard request submission from regular employee: forward to head of employee's unit (Service, Department, or Direction head)
         targetUnit = await getHeadingUnit(unitRow, conn);
         if (!targetUnit) {
             throw new Error(`No head found for unit '${unitRow.unit_id}'`);
@@ -301,11 +345,11 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
         );
     }
-    else if (['directeur', 'chef_departement', 'chef_service'].includes(row[0].role) && row[0].role !== 'directeur') {
-        // Forward to the head of the parent unit
+    else if (currentEmp.role === 'chef_service') {
+        // Step approved by chef_service -> forward to head of parent department (or parent direction if no department)
         const parentUnit = await getParentUnit(unitRow, conn);
         if (!parentUnit) {
-            throw new Error(`No parent unit found for unit '${unitRow.unit_id}'`);
+            throw new Error(`No parent unit found for service '${unitRow.unit_id}'`);
         }
         targetUnit = await getHeadingUnit(parentUnit, conn);
         if (!targetUnit) {
@@ -316,13 +360,46 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
         );
     }
-    else if (row[0].role === 'directeur') {
-        // Forward to HR
-        const [hrRows] = await conn.query('SELECT * FROM Employe WHERE role = ? AND direction_id = ?', ['drh', unitRow.unit_id]);
-        if (hrRows.length === 0) {
-            throw new Error(`No HR employee found for unit '${unitRow[0].unit_id}'`);
+    else if (currentEmp.role === 'chef_departement') {
+        // Step approved by chef_departement -> forward to director of direction (or HR if department is top-level direction)
+        const parentUnit = await getParentUnit(unitRow, conn);
+        if (parentUnit && parentUnit.type === 'direction') {
+            targetUnit = await getHeadingUnit(parentUnit, conn);
+        } else {
+            // If department has no parent direction or is already top level, forward to DRH
+            const [hrRows] = await conn.query('SELECT * FROM Employe WHERE role = ? AND direction_id = ?', ['drh', unitRow.direction_id]);
+            if (hrRows.length === 0) {
+                // Fallback to any DRH if direction DRH not found
+                const [anyHrRows] = await conn.query('SELECT * FROM Employe WHERE role = ?', ['drh']);
+                if (anyHrRows.length === 0) {
+                    throw new Error('No HR employee found in system');
+                }
+                targetUnit = anyHrRows[0];
+            } else {
+                targetUnit = hrRows[0];
+            }
         }
-        targetUnit = hrRows[0];
+
+        if (!targetUnit) {
+            throw new Error(`No target found for department head approval step`);
+        }
+        await conn.query(
+            'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
+        );
+    }
+    else if (currentEmp.role === 'directeur') {
+        // Step approved by directeur -> forward to HR (DRH)
+        const [hrRows] = await conn.query('SELECT * FROM Employe WHERE role = ? AND direction_id = ?', ['drh', unitRow.direction_id ?? unitRow.unit_id]);
+        if (hrRows.length === 0) {
+            const [anyHrRows] = await conn.query('SELECT * FROM Employe WHERE role = ?', ['drh']);
+            if (anyHrRows.length === 0) {
+                throw new Error(`No HR employee found for direction '${unitRow.unit_id}'`);
+            }
+            targetUnit = anyHrRows[0];
+        } else {
+            targetUnit = hrRows[0];
+        }
         await conn.query(
             'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
             [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
@@ -431,10 +508,29 @@ const requestService = {
                 throw new Error(`Employee '${employeeId}' already has a pending request`);
             }
 
+            const [approvedRequests] = await connection.query(
+                'SELECT request_id, start_date, duration FROM Leave_request WHERE Emp_id = ? AND request_status = ?',
+                [employeeId, 'approved']
+            );
+            const newStart = new Date(startDate);
+            const newEnd = new Date(endDate);
+            for (const existing of approvedRequests) {
+                const startDateStr = existing.start_date instanceof Date 
+                    ? existing.start_date.toISOString().split('T')[0]
+                    : String(existing.start_date).split('T')[0];
+                const existingStart = new Date(startDateStr);
+                const existingEnd = new Date(existingStart);
+                existingEnd.setDate(existingEnd.getDate() + Number(existing.duration) - 1);
+
+                if (newStart <= existingEnd && newEnd >= existingStart) {
+                    throw new Error(`La période demandée chevauche un congé déjà approuvé (du ${startDateStr} pour ${existing.duration} jour(s))`);
+                }
+            }
+
             await connection.beginTransaction();
             const [result] = await connection.query(
-                'INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [employeeId, Number(exerciseYear), leaveType, startDate, effectiveDuration, normalizedReasonType || null, normalizedJustification || null, url ?? null, 'pending']
+                'INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [employeeId, Number(exerciseYear), leaveType, startDate, effectiveDuration, normalizedReasonType || null, normalizedJustification || null, url ?? null, 'pending', new Date().toISOString().slice(0, 19).replace('T', ' ')]
             );
 
             if (leaveType === 'annual') {
@@ -445,6 +541,21 @@ const requestService = {
                 if (priorExerciseRows.length > 0) {
                     throw new Error(`Employee '${employeeId}' still has balance in previous exercise year(s). Please use the available balance before requesting advance leave.`);
                 }
+
+                // Advance leave is capped at 30 days per exercise, cumulative across all
+                // approved advance requests for that exercise (not per individual request).
+                const [advanceUsageRows] = await connection.query(
+                    `SELECT COALESCE(SUM(ra.days_allocated), 0) AS total_days
+                     FROM Request_exercise_allocation ra
+                     JOIN Leave_request lr ON lr.request_id = ra.request_id
+                     WHERE lr.Emp_id = ? AND lr.leave_type = 'advance' AND lr.request_status = 'approved' AND lr.exercise = ?`,
+                    [employeeId, exerciseYear]
+                );
+                const advanceUsedThisExercise = Number(advanceUsageRows[0].total_days) || 0;
+                if (advanceUsedThisExercise + effectiveDuration > 30) {
+                    throw new Error(`Advance leave cap of 30 days per exercise exceeded: ${advanceUsedThisExercise} day(s) already approved this exercise, ${effectiveDuration} more requested`);
+                }
+
                 const [currentExerciseRows] = await connection.query('SELECT * FROM Exercise WHERE Emp_id = ? AND year = ?', [employeeId, exerciseYear]);
                 const advanceAllocations = computeAdvanceExerciseSplit(effectiveDuration, currentExerciseRows, exerciseYear);
                 for (const allocation of advanceAllocations) {
@@ -455,7 +566,7 @@ const requestService = {
                 }
             }
 
-            const shouldSendToDepartmentHead = Boolean(directToDepartmentHead || sendToDepartmentHead);
+            const shouldSendToDepartmentHead = directToDepartmentHead === true || directToDepartmentHead === 'true' || sendToDepartmentHead === true || sendToDepartmentHead === 'true';
             const targetUnit = await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection, shouldSendToDepartmentHead);
             if (targetUnit && targetUnit.id) {
                 await createNotification({
@@ -622,7 +733,46 @@ const requestService = {
             throw new Error('You are not authorized to cancel this leave request');
         }
 
-        await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['cancelled', requestId]);
+        if (!['pending', 'approved'].includes(request.request_status)) {
+            throw new Error(`Request cannot be cancelled from status '${request.request_status}'`);
+        }
+
+        let daysToRefund = 0;
+        if (request.request_status === 'approved' && request.leave_type !== 'exceptional') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const startDate = new Date(request.start_date);
+            startDate.setHours(0, 0, 0, 0);
+            const duration = Number(request.duration) || 0;
+            const endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + duration - 1);
+
+            if (today < startDate) {
+                // Case 1: leave hasn't started yet -> refund the full duration
+                daysToRefund = duration;
+            } else if (today <= endDate) {
+                // Case 2: leave is in progress -> refund only the not-yet-taken days
+                const elapsedDays = Math.floor((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
+                daysToRefund = Math.max(duration - elapsedDays, 0);
+            } else {
+                throw new Error('This leave has already ended and cannot be cancelled');
+            }
+        }
+
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
+            if (daysToRefund > 0) {
+                await refundApprovedAllocations(requestId, daysToRefund, connection);
+            }
+            await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['cancelled', requestId]);
+            await connection.commit();
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
 
         // Get employee info for notification message
         const [empRows] = await pool.query('SELECT nom, prenom FROM Employe WHERE id = ?', [currentUserId]);
@@ -650,7 +800,7 @@ const requestService = {
             }
         }
 
-        return { requestId, message: 'Request cancelled successfully' };
+        return { requestId, message: 'Request cancelled successfully', daysRefunded: daysToRefund };
     },
     async getRequestDetails(requestId, currentUserId, currentUserRole) {
         await assertRequestAccess(requestId, currentUserId, currentUserRole);
@@ -664,3 +814,4 @@ module.exports.computeAnnualExerciseSplit = computeAnnualExerciseSplit;
 module.exports.resolveDepartmentHeadTarget = resolveDepartmentHeadTarget;
 module.exports.applyApprovedAnnualAllocations = applyApprovedAnnualAllocations;
 module.exports.applyApprovedAdvanceAllocations = applyApprovedAdvanceAllocations;
+module.exports.refundApprovedAllocations = refundApprovedAllocations;

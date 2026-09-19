@@ -1,5 +1,6 @@
 const bcrypt = require('bcrypt');
 const pool = require('./db');
+const { assignBalance } = require('./utils/helpers');
 
 const DEFAULT_PASSWORD = 'Passw0rd!';
 
@@ -71,6 +72,8 @@ async function seedEmployees(conn, org) {
     { key: 'e7', first: 'Bilal',   last: 'Rahmani',  email: 'bilal.rahmani@corp.dz',   role: 'employe', level: 'service', unit: 'Section Infra', date: '2021-08-09' },
     // zero-balance employee for testing advance leave going negative
     { key: 'e8', first: 'Sami',    last: 'Grine',    email: 'sami.grine@corp.dz',      role: 'employe', level: 'service', unit: 'Section Infra', date: '2023-02-10' },
+    // recruited during the current exercise (2026), for testing the new-hire balance
+    { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',   date: '2026-08-23' },
   ];
 
   for (const p of roster) {
@@ -96,31 +99,39 @@ async function seedExercise(conn, emp) {
   // e8 stays at 0 in both years so an advance request there immediately goes negative
   const exercises = {};
   for (const key of Object.keys(emp)) {
-    const balances = key === 'e8' ? { 2025: 0, 2026: 7.0 } : { 2024: 5, 2025: 30, 2026: 7.0 };
-    const [r2025] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance) VALUES (?, ?, ?)', [emp[key], 2025, balances[2025]]);
-    const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance) VALUES (?, ?, ?)', [emp[key], 2026, balances[2026]]);
-    exercises[key] = { 2025: r2025.insertId, 2026: r2026.insertId };
+    if (key === 'e9') {
+      // hired 2026-08-16: no exercise before hire, only 2026
+      // balance = hire month (16 days attended, Aug 16 -> 31) + 2.5 for September
+      const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2026, assignBalance(16) + 2.5, '2026-08-16']);
+      exercises[key] = { 2026: r2026.insertId };
+      continue;
+    }
+    const balances = key === 'e8' ? { 2024: 0, 2025: 0, 2026: 7.0 } : { 2024: 5, 2025: 30, 2026: 7.0 };
+    const [r2024] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2024, balances[2024], '2024-07-01']);
+    const [r2025] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2025, balances[2025], '2025-07-01']);
+    const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2026, balances[2026], '2026-07-01']);
+    exercises[key] = { 2024: r2024.insertId, 2025: r2025.insertId, 2026: r2026.insertId };
   }
   return exercises;
 }
 
 async function seedLeaveRequestsAndSteps(conn, emp, exercises) {
   const requests = [
-    { key: 'r1', emp: 'e1', exercise: 2026, type: 'annual',      start: '2026-10-05', duration: 5,  status: 'pending' },
-    { key: 'r2', emp: 'e2', exercise: 2026, type: 'annual',      start: '2026-09-20', duration: 3,  status: 'approved' },
-    { key: 'r3', emp: 'e3', exercise: 2026, type: 'exceptional', start: '2026-09-15', duration: 2,  status: 'rejected', reason: 'family_event', justification: 'Family emergency' },
-    { key: 'r4', emp: 'e4', exercise: 2025, type: 'advance',     start: '2026-11-01', duration: 4,  status: 'pending' },
-    { key: 'r5', emp: 'e5', exercise: 2026, type: 'annual',      start: '2026-12-10', duration: 7,  status: 'cancelled' },
-    { key: 'r6', emp: 'e6', exercise: 2026, type: 'annual',      start: '2026-09-01', duration: 10, status: 'approved' },
-    { key: 'r7', emp: 'e7', exercise: 2026, type: 'exceptional', start: '2026-09-22', duration: 1,  status: 'pending', reason: 'medical', justification: 'Doctor appointment' },
+    { key: 'r1', emp: 'e1', exercise: 2026, type: 'annual',      start: '2026-10-05', duration: 5,  status: 'pending',   created_at: '2026-08-01 10:00:00' },
+    { key: 'r2', emp: 'e2', exercise: 2026, type: 'annual',      start: '2026-09-20', duration: 3,  status: 'approved',  created_at: '2026-08-05 11:30:00' },
+    { key: 'r3', emp: 'e3', exercise: 2026, type: 'exceptional', start: '2026-09-15', duration: 2,  status: 'rejected',  reason: 'family_event', justification: 'Family emergency', created_at: '2026-08-10 09:15:00' },
+    { key: 'r4', emp: 'e4', exercise: 2025, type: 'advance',     start: '2026-11-01', duration: 4,  status: 'pending',   created_at: '2026-08-15 14:00:00' },
+    { key: 'r5', emp: 'e5', exercise: 2026, type: 'annual',      start: '2026-12-10', duration: 7,  status: 'cancelled', created_at: '2026-08-20 16:45:00' },
+    { key: 'r6', emp: 'e6', exercise: 2026, type: 'annual',      start: '2026-09-01', duration: 10, status: 'approved',  created_at: '2026-08-22 08:30:00' },
+    { key: 'r7', emp: 'e7', exercise: 2026, type: 'exceptional', start: '2026-09-22', duration: 1,  status: 'pending',   reason: 'medical', justification: 'Doctor appointment', created_at: '2026-08-25 12:00:00' },
   ];
 
   const requestIds = {};
   for (const r of requests) {
     const [result] = await conn.query(
-      `INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, request_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [emp[r.emp], r.exercise, r.type, r.start, r.duration, r.reason || null, r.justification || null, r.status]
+      `INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, request_status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [emp[r.emp], r.exercise, r.type, r.start, r.duration, r.reason || null, r.justification || null, r.status, r.created_at]
     );
     requestIds[r.key] = result.insertId;
 
@@ -140,7 +151,7 @@ async function seedLeaveRequestsAndSteps(conn, emp, exercises) {
     ['r1', [['secRecru', null, null, null]]],
     ['r2', [['secRecru', 'approved', '2026-09-18 09:00:00', 'OK'], ['hr', 'approved', '2026-09-18 14:00:00', 'Validated by HR']]],
     ['r3', [['secPaie', 'rejected', '2026-09-14 11:00:00', 'Insufficient notice']]],
-    ['r4', [['secPaie', 'approved', '2026-10-25 10:00:00', 'Forwarded up'], ['deptRH', null, null, null]]],
+    ['r4', [['secPaie', 'approved', '2026-10-25 10:00:00', 'Forwarded to Department Head'], ['deptRH', null, null, null]]],
     ['r5', [['secDev', 'approved', '2026-11-20 10:00:00', 'Approved then cancelled by employee']]],
     ['r6', [['secDev', 'approved', '2026-08-25 09:00:00', 'OK'], ['hr', 'approved', '2026-08-26 10:00:00', 'Validated by HR']]],
     ['r7', [['secInfra', null, null, null]]],

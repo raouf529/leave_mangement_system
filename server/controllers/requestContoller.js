@@ -25,8 +25,8 @@ const requestController = {
                 reasonType,
                 justification,
                 url: justificationUrl,
-                directToDepartmentHead: Boolean(directToDepartmentHead || sendToDepartmentHead),
-                sendToDepartmentHead: Boolean(directToDepartmentHead || sendToDepartmentHead),
+                directToDepartmentHead: directToDepartmentHead === true || directToDepartmentHead === 'true',
+                sendToDepartmentHead: sendToDepartmentHead === true || sendToDepartmentHead === 'true',
             });
 
             res.status(201).json({ message: 'Leave request created successfully', requestId });

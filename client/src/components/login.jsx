@@ -1,13 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
 
 function Login() {
+  // Guards against reaching /login via the browser back button while a
+  // session is still valid (e.g. back from /dashboard). Without this, the
+  // route just renders the empty form even though the user is logged in.
+  const [checkingSession, setCheckingSession] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let isMounted = true;
+
+    api.get('/auth/me', { skipAuthRedirect: true }) // the 401 here is expected when logged out, don't let the interceptor react to it
+      .then((res) => {
+        if (!isMounted) return;
+        navigate(res.data?.role === 'admin' ? '/admin' : '/dashboard', { replace: true });
+      })
+      .catch(() => {
+        if (isMounted) setCheckingSession(false); // no valid session -> show the login form
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [navigate]);
+
+  if (checkingSession) return null;
 
   async function handleLogin(e) {
     e.preventDefault();
