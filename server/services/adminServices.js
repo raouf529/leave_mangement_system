@@ -34,6 +34,54 @@ function assignContinuingBalance(exerciseYear, referenceDate = new Date()) {
 
 
 
+// Finds who must treat a request for a given role, from the requester's org units
+// (service -> departement -> direction). HR is scoped per direction.
+async function findStepTarget(employeeId, role) {
+    const [employee] = await pool.query(
+        `SELECT service_id, departement_id, direction_id FROM Employe WHERE id = ?`,
+        [employeeId]
+    );
+    if (employee.length === 0) {
+        throw new Error(`Employee '${employeeId}' not found`);
+    }
+
+    let serviceId = employee[0].service_id;
+    let departementId = employee[0].departement_id;
+    let directionId = employee[0].direction_id;
+
+    // an employee only has his own unit filled, so climb the tree to get the parent units
+    if (!departementId && serviceId) {
+        const [service] = await pool.query(`SELECT departement_id FROM Service WHERE id = ?`, [serviceId]);
+        departementId = service.length > 0 ? service[0].departement_id : null;
+    }
+    if (!directionId && departementId) {
+        const [departement] = await pool.query(`SELECT direction_id FROM Departement WHERE id = ?`, [departementId]);
+        directionId = departement.length > 0 ? departement[0].direction_id : null;
+    }
+
+    // role -> [column that holds the unit of that role's head, unit id of the requester]
+    const units = {
+        chef_service: ['service_id', serviceId],
+        chef_departement: ['departement_id', departementId],
+        directeur: ['direction_id', directionId],
+        drh: ['direction_id', directionId],
+    };
+    if (!units[role]) {
+        throw new Error(`Unknown role '${role}'`);
+    }
+    const [column, unitId] = units[role];
+    if (!unitId) {
+        throw new Error(`Employee '${employeeId}' has no unit for role '${role}'`);
+    }
+
+    const [heads] = await pool.query(`SELECT id FROM Employe WHERE role = ? AND ${column} = ?`, [role, unitId]);
+    if (heads.length === 0) {
+        throw new Error(`No '${role}' found for employee '${employeeId}'`);
+    }
+    return heads[0].id;
+}
+
+
 const adminServices = {
     async getLeaveRequests(employeeId) {
         const whereClause = employeeId === undefined ? '' : 'WHERE lr.Emp_id = ?';
@@ -121,7 +169,7 @@ const adminServices = {
             );
 
             if (!employee || employee.length === 0) {
-                throw new Error(`Employee not found: ${empId}`);
+                throw new Error(`Employé introuvable : ${empId}`);
             }
 
             const hireDate = new Date(employee[0].date_entree);
@@ -214,7 +262,7 @@ const adminServices = {
             const [result] = await pool.query(query, values);
 
             if (result.affectedRows === 0) {
-                throw new Error(`Leave request not found: ${requestId}`);
+                throw new Error(`Demande de congé introuvable : ${requestId}`);
             }
 
             const [updatedRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
@@ -249,8 +297,8 @@ const adminServices = {
             if (request.length === 0) {
                 throw new Error(`Request '${RequestStep[0].request_id}' not found`);
             }
-            if (request[0].request_status === 'approved' || request[0].request_status === 'rejected' || request[0].request_status == 'time out') {
-                throw new Error(`Request '${RequestStep[0].request_id}' is already approved or rejected`);
+            if (request[0].request_status !== 'pending') {
+                throw new Error(`Request '${RequestStep[0].request_id}' is not pending`);
             }
             // extract all request with the same request_id, and check input step is las in order, if not throw an error
             const [requestSteps] = await pool.query(`SELECT * FROM Request_step WHERE request_id = ? ORDER BY step_order`, [RequestStep[0].request_id]);
@@ -261,62 +309,15 @@ const adminServices = {
             if (lastStep.step_id !== stepId) {
                 throw new Error(`Request '${RequestStep[0].request_id}' step '${stepId}' is not the last step`);
             }
-            if(newRole=='chef_service'){
-                // extract id of same chef service as employe
-                const [employee] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [request[0].Emp_id]);
-                if (employee.length === 0) {
-                    throw new Error(`Employee '${request[0].Emp_id}' not found`);
-                }
-                const [newTarget] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [employee[0].chef_service]);
-                if (newTarget.length === 0) {
-                    throw new Error(`Chef service '${employee[0].chef_service}' not found`);
-                }
-                await pool.query(`UPDATE Request_step SET target_id = ? WHERE step_id = ?`, [newTarget[0].Emp_id, stepId]);
-            }else if (newRole=='chef_departement'){
-                // extract id of same chef departement as employe
-                const [employee] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [request[0].Emp_id]);
-                if (employee.length === 0) {
-                    throw new Error(`Employee '${request[0].Emp_id}' not found`);
-                }
-                const [newTarget] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [employee[0].chef_departement]);
-                if (newTarget.length === 0) {
-                    throw new Error(`Chef departement '${employee[0].chef_departement}' not found`);
-                }
-                await pool.query(`UPDATE Request_step SET target_id = ? WHERE step_id = ?`, [newTarget[0].Emp_id, stepId]);
-            }else if (newRole=='drh'){
-                // extract id of same drh as employe
-                const [employee] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [request[0].Emp_id]);
-                if (employee.length === 0) {
-                    throw new Error(`Employee '${request[0].Emp_id}' not found`);
-                }
-                const [newTarget] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [employee[0].drh]);
-                if (newTarget.length === 0) {
-                    throw new Error(`DRH '${employee[0].drh}' not found`);
-                }
-                await pool.query(`UPDATE Request_step SET target_id = ? WHERE step_id = ?`, [newTarget[0].Emp_id, stepId]);
-            }else if(newRole=='directeur'){
-                // extract id of same directeur as employe
-                const [employee] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [request[0].Emp_id]);
-                if (employee.length === 0) {
-                    throw new Error(`Employee '${request[0].Emp_id}' not found`);
-                }
-                const [newTarget] = await pool.query(`SELECT * FROM Employee WHERE Emp_id = ?`, [employee[0].directeur]);
-                if (newTarget.length === 0) {
-                    throw new Error(`Directeur '${employee[0].directeur}' not found`);
-                }
-                await pool.query(`UPDATE Request_step SET target_id = ? WHERE step_id = ?`, [newTarget[0].Emp_id, stepId]);
-            }else if(newRole=='drh'){
-                // extract all drh
-                const [drh] = await pool.query(`SELECT * FROM Employee WHERE role = 'drh'`);
-                if (drh.length === 0) {
-                    throw new Error(`DRH '${newRole}' not found`);
-                }
-                await pool.query(`UPDATE Request_step SET target_id = ? WHERE step_id = ?`, [drh[0].Emp_id, stepId]);
+            if (lastStep.decision) {
+                throw new Error(`Request step '${stepId}' already has a decision`);
             }
+            const targetId = await findStepTarget(request[0].Emp_id, newRole);
+            await pool.query(`UPDATE Request_step SET target_id = ? WHERE step_id = ?`, [targetId, stepId]);
             return { success: true, message: 'Request step target updated successfully' };
         } catch (error) {
             throw new Error('Error updating request step target: ' + error.message);
-        }        
+        }
     },
     async updateRequestStepDecision(stepId,decision){
         try {
@@ -337,14 +338,14 @@ const adminServices = {
             if (lastStep.step_id !== stepId) {
                 throw new Error(`Request '${RequestStep[0].request_id}' step '${stepId}' is not the last step`);
             }
-            if (request[0].request_status === 'approved' || request[0].request_status === 'rejected' || request[0].request_status == 'time out') {
-                throw new Error(`Request '${RequestStep[0].request_id}' is already approved or rejected`);
+            if (request[0].request_status !== 'pending') {
+                throw new Error(`Request '${RequestStep[0].request_id}' is not pending`);
             }
-            await pool.query(`UPDATE Request_step SET decision = ? WHERE step_id = ?`, [decision, stepId]);
+            await pool.query(`UPDATE Request_step SET decision = ?, decided_at = NOW() WHERE step_id = ?`, [decision, stepId]);
             return { success: true, message: 'Request step decision updated successfully' };
         } catch (error) {
             throw new Error('Error updating request step decision: ' + error.message);
-        }        
+        }
     }
 };
 

@@ -22,7 +22,7 @@ async function getEmployeeById(employeeId, connection = null) {
     const runner = connection || pool;
     const [users] = await runner.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
     if (users.length === 0) {
-        throw new Error('Employee not found');
+        throw new Error('Employé introuvable.');
     }
     return users[0];
 }

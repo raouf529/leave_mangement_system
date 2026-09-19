@@ -23,7 +23,7 @@ const adminController = {
         try {
             const { empId, year, balance } = req.body;
             if (!empId || year === undefined || balance === undefined) {
-                return res.status(400).json({ error: 'empId, year, and balance are required' });
+                return res.status(400).json({ error: 'L’identifiant de l’employé, l’année et le solde sont requis.' });
             }
             const exercise = await adminServices.createExerciseById({
                 empId: Number(empId),
@@ -39,7 +39,7 @@ const adminController = {
         try {
             const { empId, year, balance } = req.body;
             if (empId === undefined || year === undefined || balance === undefined) {
-                return res.status(400).json({ error: 'empId, year, and balance are required' });
+                return res.status(400).json({ error: 'L’identifiant de l’employé, l’année et le solde sont requis.' });
             }
             const exercise = await adminServices.updateExerciseBalance({ empId: Number(empId), year: Number(year), balance: Number(balance) });
             res.status(200).json(exercise);
@@ -61,7 +61,7 @@ const adminController = {
         try {
             const { stepId, newRole } = req.body;
             if (stepId === undefined || !newRole) {
-                return res.status(400).json({ error: 'stepId and newRole are required' });
+                return res.status(400).json({ error: 'L’identifiant de l’étape et le nouveau rôle sont requis.' });
             }
             const result = await adminServices.updateRequestStepTarget(Number(stepId), newRole);
             res.status(200).json(result);
@@ -73,7 +73,7 @@ const adminController = {
         try {
             const { stepId, decision } = req.body;
             if (stepId === undefined || !decision) {
-                return res.status(400).json({ error: 'stepId and decision are required' });
+                return res.status(400).json({ error: 'L’identifiant de l’étape et la décision sont requis.' });
             }
             const result = await adminServices.updateRequestStepDecision(Number(stepId), decision);
             res.status(200).json(result);
@@ -85,7 +85,7 @@ const adminController = {
         try {
             const { stepId, newRole, decision } = req.body;
             if (stepId === undefined) {
-                return res.status(400).json({ error: 'stepId is required' });
+                return res.status(400).json({ error: 'L’identifiant de l’étape est requis.' });
             }
             if (newRole !== undefined) {
                 const result = await adminServices.updateRequestStepTarget(Number(stepId), newRole);
@@ -95,7 +95,7 @@ const adminController = {
                 const result = await adminServices.updateRequestStepDecision(Number(stepId), decision);
                 return res.status(200).json(result);
             }
-            return res.status(400).json({ error: 'newRole or decision is required' });
+            return res.status(400).json({ error: 'Un nouveau rôle ou une décision est requis.' });
         } catch (error) {
             res.status(400).json({ error: error.message });
         }

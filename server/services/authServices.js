@@ -36,13 +36,13 @@ const authService = {
     async loginEmployee({ email, password }) {
         const [users] = await pool.query('SELECT * FROM Employe WHERE email = ?', [email]);
         if (users.length === 0) {
-            throw new Error('Invalid email or password');
+            throw new Error('Adresse e-mail ou mot de passe incorrect.');
         }
 
         const user = users[0];
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            throw new Error('Invalid email or password');
+            throw new Error('Adresse e-mail ou mot de passe incorrect.');
         }
 
         const { accessToken, refreshToken } = generateTokens(user);

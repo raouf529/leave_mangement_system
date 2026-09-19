@@ -23,7 +23,7 @@ const upload = multer({
 		const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx'];
 		const extension = path.extname(file.originalname).toLowerCase();
 		if (!allowedExtensions.includes(extension)) {
-			return callback(new Error('Justification document must be a PDF, image, DOC, or DOCX file'));
+			return callback(new Error('Le document justificatif doit être un fichier PDF, image, DOC ou DOCX.'));
 		}
 		callback(null, true);
 	}

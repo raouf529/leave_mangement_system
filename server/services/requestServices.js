@@ -34,7 +34,7 @@ function computeAnnualExerciseSplit(duration, exercises, currentExerciseYear) {
     }
 
     if (remainingDuration > 0) {
-        throw new Error(`Not enough budget in exercises to cover the requested duration. Remaining duration: ${remainingDuration}`);
+        throw new Error(`Vous n'avez pas assez de solde dans les exercices pour couvrir la durée demandée. Il reste ${remainingDuration} jour(s) à couvrir.`);
     }
 
     return allocations;
@@ -50,7 +50,7 @@ function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
         .find((exercise) => Number(exercise.year) === Number(currentExerciseYear));
 
     if (!currentExercise || Number(currentExercise.balance) <= 0) {
-        throw new Error(`No available balance in the current exercise year ${currentExerciseYear}`);
+        throw new Error(`Aucun solde disponible pour l’exercice en cours (${currentExerciseYear}).`);
     }
     return [{
         exercise_id: currentExercise.exercise_id,
@@ -498,6 +498,11 @@ const requestService = {
             const [employeeRows] = await connection.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
             if (employeeRows.length === 0) {
                 throw new Error(`Employee '${employeeId}' not found`);
+            }
+
+            const employeeRole = employeeRows[0].role;
+            if (employeeRole === 'directeur' || employeeRole === 'drh') {
+                throw new Error('Les directeurs et le DRH ne peuvent pas soumettre de demande de congé via le workflow standard. Veuillez contacter l’administration.');
             }
 
             const [pendingRequests] = await connection.query(

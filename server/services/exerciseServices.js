@@ -18,7 +18,7 @@ const ExerciseService = {
         try {
             const [employee] = await pool.query(`SELECT id FROM Employe WHERE id = ?`, [employeeId]);
             if (employee.length === 0) {
-                throw new Error('Employee not found');
+                throw new Error('Employé introuvable.');
             }
 
             // In Attendance_count table, `month` is a DATE field (e.g. '2026-09-01').
@@ -47,7 +47,7 @@ const ExerciseService = {
                 [employeeId]
             );
             if (employee.length === 0) {
-                throw new Error('Employee not found');
+                throw new Error('Employé introuvable.');
             }
 
             // Format date string to YYYY-MM-01
@@ -115,4 +115,4 @@ const ExerciseService = {
     }
 };
 
-module.exports = ExerciseService;
+module.exports = ExerciseService;

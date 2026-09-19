@@ -6,7 +6,7 @@ const profileService = {
     async getEmployeeProfile(employeeId) {
         const [rows] = await pool.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
         if (rows.length === 0) {
-            throw new Error('Employee not found');
+            throw new Error('Employé introuvable.');
         }
 
         const [employees] = await pool.query(
@@ -23,7 +23,7 @@ const profileService = {
             [employeeId]
         );
         if (employees.length === 0 || employees[0].resolved_direction_id === null) {
-            throw new Error(`Direction for employee '${employeeId}' not found`);
+            throw new Error(`Direction de l’employé '${employeeId}' introuvable.`);
         }
         const employee = employees[0];
         const unit = getEmployeeUnit(employee);
@@ -138,7 +138,7 @@ const profileService = {
         const { firstName, lastName, email } = updates;
         const [rows] = await pool.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
         if (rows.length === 0) {
-            throw new Error('Employee not found');
+            throw new Error('Employé introuvable.');
         }
 
         await pool.query(
@@ -160,17 +160,17 @@ const profileService = {
             [employeeId]
         );
         if (rows.length === 0) {
-            throw new Error('Employee not found');
+            throw new Error('Employé introuvable.');
         }
 
         const user = rows[0];
         if (!['head', 'hr'].includes(mapRole(user.role))) {
-            throw new Error('Only employees with the role of "head" or "hr" can view underemployees');
+            throw new Error('Seuls les employés avec le rôle "head" ou "hr" peuvent consulter leurs collaborateurs.');
         }
 
         const userUnit = getEmployeeUnit(user);
         if (!userUnit) {
-            throw new Error(`Unit for employee '${employeeId}' not found`);
+            throw new Error(`Unité de l’employé '${employeeId}' introuvable.`);
         }
         const [underemployees] = await pool.query(
             `SELECT e.*, d.nom AS direction_name, dep.nom AS departement_name, s.nom AS service_name

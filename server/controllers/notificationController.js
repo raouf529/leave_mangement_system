@@ -5,7 +5,7 @@ const notificationController = {
         try {
             const employeeId = req.user?.id;
             if (!employeeId) {
-                return res.status(401).json({ error: 'User not authenticated' });
+                return res.status(401).json({ error: 'Vous devez être connecté pour effectuer cette action.' });
             }  
             const notifications = await notificationService.getNotificationsByEmployeeId(employeeId);
             res.json(notifications);
@@ -17,14 +17,14 @@ const notificationController = {
         try {
             const employeeId = req.user?.id;
             if (!employeeId) {
-                return res.status(401).json({ error: 'User not authenticated' });
+                return res.status(401).json({ error: 'Vous devez être connecté pour effectuer cette action.' });
             }
             const notificationId = req.params.notificationId;
             const success = await notificationService.markNotificationAsRead(notificationId, employeeId);
             if (success) {
-                res.json({ message: 'Notification marked as read' });
+                res.json({ message: 'Notification marquée comme lue.' });
             } else {
-                res.status(404).json({ error: 'Notification not found or access denied' });
+                res.status(404).json({ error: 'Notification introuvable ou accès refusé.' });
             }
         } catch (error) {
             res.status(500).json({ error: error.message });
@@ -34,7 +34,7 @@ const notificationController = {
         try {
             const employeeId = req.user?.id;
             if (!employeeId) {
-                return res.status(401).json({ error: 'User not authenticated' });
+                return res.status(401).json({ error: 'Vous devez être connecté pour effectuer cette action.' });
             }
             const notifications = await notificationService.getUnreadNotifications(employeeId);
             res.json(notifications);

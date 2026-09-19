@@ -7,12 +7,12 @@ const authenticateToken = (req, res, next) => {
         const token = req.cookies?.accessToken;
 
         if (!token) {
-            return res.status(401).json({ message: 'Access token required' });
+            return res.status(401).json({ message: 'Le jeton d’accès est requis.' });
         }
 
         jws.verify(token, process.env.JWT_SECRET, (err, user) => {
             if (err) {
-                return res.status(403).json({ message: 'Invalid or expired token' });
+                return res.status(403).json({ message: 'Le jeton d’accès est invalide ou expiré.' });
             }
             req.user = user;
             next();
@@ -27,7 +27,7 @@ const authorizeRoles = (...allowedRoles) => {
     return (req, res, next) => {
         try {
             if (!req.user || !allowedRoles.includes(req.user.role)) {
-                return res.status(403).json({ message: 'You do not have permission to perform this action' });
+                return res.status(403).json({ message: 'Vous n’avez pas les permissions nécessaires pour effectuer cette action.' });
             }
             next();
         } catch (error) {
@@ -39,7 +39,7 @@ const authorizeRoles = (...allowedRoles) => {
 const authorizeRequestAccess = async (req, res, next) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'User not authenticated' });
+            return res.status(401).json({ message: 'Vous devez être connecté pour effectuer cette action.' });
         }
 
         const requestId = req.params?.requestId;
@@ -49,7 +49,7 @@ const authorizeRequestAccess = async (req, res, next) => {
 
         const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
         if (requestRows.length === 0) {
-            return res.status(404).json({ message: 'Leave request not found' });
+            return res.status(404).json({ message: 'La demande de congé est introuvable.' });
         }
 
         const isOwner = Number(requestRows[0].Emp_id) === Number(req.user.id);
@@ -59,7 +59,7 @@ const authorizeRequestAccess = async (req, res, next) => {
             return next();
         }
 
-        return res.status(403).json({ message: 'You are not authorized to access this leave request' });
+        return res.status(403).json({ message: 'Vous n’êtes pas autorisé à accéder à cette demande de congé.' });
     } catch (error) {
         res.status(500).json({ message: 'Error occurred while authorizing leave request access' });
     }
@@ -68,7 +68,7 @@ const authorizeRequestAccess = async (req, res, next) => {
 const authorizeRequestStepAccess = async (req, res, next) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'User not authenticated' });
+            return res.status(401).json({ message: 'Vous devez être connecté pour effectuer cette action.' });
         }
 
         const stepId = req.params?.stepId;
@@ -78,7 +78,7 @@ const authorizeRequestStepAccess = async (req, res, next) => {
 
         const [stepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
         if (stepRows.length === 0) {
-            return res.status(404).json({ message: 'Leave request step not found' });
+            return res.status(404).json({ message: 'L’étape de la demande de congé est introuvable.' });
         }
 
         const isAssignedTarget = Number(stepRows[0].target_id) === Number(req.user.id);
@@ -88,7 +88,7 @@ const authorizeRequestStepAccess = async (req, res, next) => {
             return next();
         }
 
-        return res.status(403).json({ message: 'You are not authorized to act on this request step' });
+        return res.status(403).json({ message: 'Vous n’êtes pas autorisé à traiter cette étape de demande.' });
     } catch (error) {
         res.status(500).json({ message: 'Error occurred while authorizing request step access' });
     }
@@ -97,7 +97,7 @@ const authorizeRequestStepAccess = async (req, res, next) => {
 const authorizeRequestTargetAccess = (req, res, next) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'User not authenticated' });
+            return res.status(401).json({ message: 'Vous devez être connecté pour effectuer cette action.' });
         }
 
         const targetId = req.params?.targetId;
@@ -112,7 +112,7 @@ const authorizeRequestTargetAccess = (req, res, next) => {
             return next();
         }
 
-        return res.status(403).json({ message: 'You are not authorized to view these request steps' });
+        return res.status(403).json({ message: 'Vous n’êtes pas autorisé à consulter ces étapes de demande.' });
     } catch (error) {
         res.status(500).json({ message: 'Error occurred while authorizing request step target access' });
     }
@@ -122,7 +122,7 @@ const authorizeRequestTargetAccess = (req, res, next) => {
 const authorizeProfileAccess = (req, res, next) => {
     try {
         if (!req.user) {
-            return res.status(401).json({ message: 'User not authenticated' });
+            return res.status(401).json({ message: 'Vous devez être connecté pour effectuer cette action.' });
         }
 
         const requestedId = req.params && req.params.id !== undefined ? Number(req.params.id) : null;
@@ -136,7 +136,7 @@ const authorizeProfileAccess = (req, res, next) => {
             return next();
         }
 
-        return res.status(403).json({ message: 'You do not have permission to access this profile' });
+        return res.status(403).json({ message: 'Vous n’avez pas l’autorisation d’accéder à ce profil.' });
     } catch (error) {
         res.status(500).json({ message: 'Error occurred while authorizing profile access' });
     }

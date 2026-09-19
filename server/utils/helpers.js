@@ -55,23 +55,23 @@ function getExerciseYearForDate(dateValue) {
 
 function calculateLeaveDuration(startDate, endDate) {
     if (!startDate || !endDate) {
-        throw new Error('Start date and end date are required');
+        throw new Error('Les dates de début et de fin sont requises.');
     }
 
     const start = new Date(startDate);
     const end = new Date(endDate);
 
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        throw new Error('Leave dates must be valid');
+        throw new Error('Les dates de congé sont invalides.');
     }
 
     if (start > end) {
-        throw new Error('Start date must be before or equal to the end date');
+        throw new Error('La date de début doit être antérieure ou égale à la date de fin.');
     }
 
     const duration = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
     if (duration <= 0) {
-        throw new Error('Leave duration must be at least one day');
+        throw new Error('La durée du congé doit être d’au moins un jour.');
     }
 
     return duration;

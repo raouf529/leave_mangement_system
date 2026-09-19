@@ -7,13 +7,13 @@ const requestController = {
         try {
             const employeeId = req.user?.id;
             if (!employeeId) {
-                return res.status(401).json({ error: 'User not authenticated' });
+                return res.status(401).json({ error: 'Vous devez être connecté pour effectuer cette action.' });
             }
             const { startDate, endDate, duration, leaveType, reasonType, justification, url, directToDepartmentHead, sendToDepartmentHead } = req.body;
             const justificationUrl = req.file ? `/uploads/justifications/${req.file.filename}` : url;
 
             if (!employeeId || !startDate || !endDate || !leaveType) {
-                return res.status(400).json({ error: 'Missing required request fields' });
+                return res.status(400).json({ error: 'Les informations requises pour la demande de congé sont manquantes.' });
             }
 
             const requestId = await requestService.createRequest({
@@ -29,7 +29,7 @@ const requestController = {
                 sendToDepartmentHead: sendToDepartmentHead === true || sendToDepartmentHead === 'true',
             });
 
-            res.status(201).json({ message: 'Leave request created successfully', requestId });
+            res.status(201).json({ message: 'Demande de congé créée avec succès.', requestId });
         } catch (error) {
             if (req.file) {
                 fs.unlink(req.file.path, () => {});
@@ -54,7 +54,7 @@ const requestController = {
         try {
             const userId = req.user?.id;
             if (!userId) {
-                return res.status(401).json({ error: 'User not authenticated' });
+                return res.status(401).json({ error: 'Vous devez être connecté pour effectuer cette action.' });
             }
 
             const steps = await requestService.getPendingStepsForUser(userId);
@@ -70,7 +70,7 @@ const requestController = {
             const { decision, comment } = req.body;
 
             if (!decision) {
-                return res.status(400).json({ error: 'Decision is required' });
+                return res.status(400).json({ error: 'La décision est obligatoire.' });
             }
 
             const result = await requestService.updateRequestStep(
@@ -92,7 +92,7 @@ const requestController = {
             const request = await requestService.getRequestDetails(requestId, req.user?.id, req.user?.role);
 
             if (!request) {
-                return res.status(404).json({ error: 'Request not found' });
+                return res.status(404).json({ error: 'La demande est introuvable.' });
             }
 
             res.status(200).json(request);
@@ -105,13 +105,13 @@ const requestController = {
             const { requestId } = req.params;
             const request = await requestService.getRequestDetails(requestId, req.user?.id, req.user?.role);
             if (!request.url_justification) {
-                return res.status(404).json({ error: 'No justification document found' });
+                return res.status(404).json({ error: 'Aucun document justificatif n’a été trouvé.' });
             }
 
             const filename = path.basename(request.url_justification);
             const filePath = path.join(__dirname, '..', 'uploads', 'justifications', filename);
             if (!fs.existsSync(filePath)) {
-                return res.status(404).json({ error: 'Justification document not found' });
+                return res.status(404).json({ error: 'Le document justificatif est introuvable.' });
             }
 
             return res.sendFile(filePath);
@@ -123,7 +123,7 @@ const requestController = {
         try {
             const { requestId } = req.params;
             const result = await requestService.cancelRequest(requestId, req.user?.id, req.user?.role);
-            res.status(200).json({ message: 'Request cancelled successfully', ...result });
+            res.status(200).json({ message: 'Demande annulée avec succès.', ...result });
         } catch (error) {
             res.status(403).json({ error: error.message });
         }

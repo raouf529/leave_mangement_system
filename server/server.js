@@ -4,6 +4,9 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 require('dotenv').config();
 
+const backgroundService = require('./services/backgroundService');
+console.log('[startup] Background scheduler initialized');
+
 const app = express();
 app.use(cors({
   origin: 'http://localhost:5173', 
