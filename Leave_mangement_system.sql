@@ -29,7 +29,8 @@ CREATE TABLE `Employe` (
   `departement_id` integer,
   `service_id` integer,
   `matricule` integer,
-  `fonction` varchar(100)
+  `fonction` varchar(100), 
+  `demand_for_an employee` bool, NOT NULL DEFAULT false,
 );
 
 CREATE TABLE `Exercise` (

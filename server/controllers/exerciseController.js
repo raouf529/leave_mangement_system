@@ -1,4 +1,4 @@
-const ExerciseService = require('../services/ExerciseServices');
+const ExerciseService = require('../services/exerciseServices');
 
 const exerciseController = {
     async getAllMonths(req, res) {
@@ -29,4 +29,4 @@ const exerciseController = {
     }
 };
 
-module.exports = exerciseController;
+module.exports = exerciseController;

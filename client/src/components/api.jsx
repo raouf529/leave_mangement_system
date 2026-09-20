@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 // Base URL now comes from an env var instead of being hardcoded in every
-// file. Falls back to localhost for local dev only.
-const BASE_URL = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+// file. Falls back to the Nginx API proxy in the container.
+const BASE_URL = import.meta.env?.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: BASE_URL,

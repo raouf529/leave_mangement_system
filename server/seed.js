@@ -70,9 +70,7 @@ async function seedEmployees(conn, org) {
     { key: 'e5', first: 'Hicham',  last: 'Bendaoud', email: 'hicham.bendaoud@corp.dz', role: 'employe', level: 'service', unit: 'Section Dev',   date: '2020-06-23' },
     { key: 'e6', first: 'Sarah',   last: 'Ouali',    email: 'sarah.ouali@corp.dz',     role: 'employe', level: 'service', unit: 'Section Dev',  date: '2022-01-17' },
     { key: 'e7', first: 'Bilal',   last: 'Rahmani',  email: 'bilal.rahmani@corp.dz',   role: 'employe', level: 'service', unit: 'Section Infra', date: '2021-08-09' },
-    // zero-balance employee for testing advance leave going negative
     { key: 'e8', first: 'Sami',    last: 'Grine',    email: 'sami.grine@corp.dz',      role: 'employe', level: 'service', unit: 'Section Infra', date: '2023-02-10' },
-    // recruited during the current exercise (2026), for testing the new-hire balance
     { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',   date: '2026-08-23' },
   ];
 
@@ -81,8 +79,6 @@ async function seedEmployees(conn, org) {
     const departementId = p.level === 'departement' ? org.departements[p.unit] : null;
     const serviceId = p.level === 'service' ? org.services[p.unit] : null;
 
-    // nom_jeune_fille is NOT NULL on the new table but the old roster has no such data,
-    // so it's seeded as a copy of nom (placeholder, not real).
     const [result] = await conn.query(
       `INSERT INTO Employe (nom, nom_jeune_fille, prenom, email, password, date_entree, role, direction_id, departement_id, service_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -95,13 +91,9 @@ async function seedEmployees(conn, org) {
 }
 
 async function seedExercise(conn, emp) {
-  // exercise_id keyed per (employee, key) so leave requests below can reference the right allocation
-  // e8 stays at 0 in both years so an advance request there immediately goes negative
   const exercises = {};
   for (const key of Object.keys(emp)) {
     if (key === 'e9') {
-      // hired 2026-08-16: no exercise before hire, only 2026
-      // balance = hire month (16 days attended, Aug 16 -> 31) + 2.5 for September
       const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2026, assignBalance(16) + 2.5, '2026-08-16']);
       exercises[key] = { 2026: r2026.insertId };
       continue;
@@ -135,8 +127,6 @@ async function seedLeaveRequestsAndSteps(conn, emp, exercises) {
     );
     requestIds[r.key] = result.insertId;
 
-    // For seed purposes, only annual requests get an allocation row, drawn entirely from
-    // the request's own exercise year (no need to simulate a real FIFO split here).
     if (r.type === 'annual') {
       const exerciseId = exercises[r.emp][r.exercise];
       await conn.query(

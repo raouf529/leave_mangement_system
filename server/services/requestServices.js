@@ -3,6 +3,7 @@ const { getExerciseYearForDate, calculateLeaveDuration } = require('../utils/hel
 
 
 function computeAnnualExerciseSplit(duration, exercises, currentExerciseYear) {
+    // split leave request on exercises starting from the oldest
     const requestedDuration = Number(duration) || 0;
     if (requestedDuration <= 0) {
         return [];
@@ -41,11 +42,11 @@ function computeAnnualExerciseSplit(duration, exercises, currentExerciseYear) {
 }
 
 function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
+    // in advanced leave, employee borrow days from currenct exercise, so we only need to check the current exercise
     const requestedDuration = Number(duration) || 0;
     if (requestedDuration <= 0) {
         return [];
     }
-    // in advanced leave, employee borrow days from currenct exercise, so we only need to check the current exercise
     const currentExercise = (Array.isArray(exercises) ? exercises : [])
         .find((exercise) => Number(exercise.year) === Number(currentExerciseYear));
 
@@ -60,9 +61,10 @@ function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
 }
 
 async function applyApprovedAnnualAllocations(requestId, conn = pool) {
+    // apply the split of annual leave request
     const [requestRows] = await conn.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
     if (requestRows.length === 0) {
-        throw new Error(`Request '${requestId}' not found`);
+        throw new Error('Demande introuvable.');
     }
     if (requestRows[0].leave_type !== 'annual') {
         return [];
@@ -87,9 +89,10 @@ async function applyApprovedAnnualAllocations(requestId, conn = pool) {
 }
 
 async function applyApprovedAdvanceAllocations(requestId, conn = pool) {
+    // apply the advance leave request
     const [requestRows] = await conn.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
     if (requestRows.length === 0) {
-        throw new Error(`Request '${requestId}' not found`);
+        throw new Error('Demande introuvable.');
     }
     if (requestRows[0].leave_type !== 'advance') {
         return [];
@@ -153,9 +156,10 @@ async function refundApprovedAllocations(requestId, daysToRefund, conn = pool) {
 }
 
 async function createAnnualExerciseRequest(requestId, conn = pool) {
+    // helper function to create annual exercise request
     const [requestRows] = await conn.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
     if (requestRows.length === 0) {
-        throw new Error(`Request '${requestId}' not found`);
+        throw new Error('Demande introuvable.');
     }
 
     const today = new Date();
@@ -163,7 +167,7 @@ async function createAnnualExerciseRequest(requestId, conn = pool) {
 
     const [exerciseRows] = await conn.query('SELECT * FROM Exercise WHERE Emp_id = ? AND year != ? AND balance > 0', [requestRows[0].Emp_id, currentExercise]);
     if (exerciseRows.length === 0) {
-        throw new Error(`Exercise for employee '${requestRows[0].Emp_id}' not found`);
+        throw new Error(`Vous n'avez pas assez de solde de congé pour couvrir la durée demandée.`);
     }
 
     const allocations = computeAnnualExerciseSplit(requestRows[0].duration, exerciseRows, currentExercise);
@@ -177,23 +181,25 @@ async function createAnnualExerciseRequest(requestId, conn = pool) {
 
     return {
         requestId,
-        message: 'Annual exercise request created successfully',
+        message: 'Demande de congé annuel créée avec succès',
         allocations
     };
 }
 
 async function getDepartement(unitId, conn = pool) {
+    // helper function to get departement info
     const [rows] = await conn.query(
         'SELECT id AS unit_id, nom AS name, direction_id FROM Departement WHERE id = ?',
         [unitId]
     );
     if (rows.length === 0) {
-        throw new Error(`Department '${unitId}' not found`);
+        throw new Error('Département introuvable.');
     }
     return { ...rows[0], type: 'department' };
 }
 
 async function getEmployeeUnit(employeeId, conn = pool) {
+    // helper function to get employee's unit info
     const [rows] = await conn.query(
         `SELECT e.id, e.role, e.direction_id, e.departement_id, e.service_id,
             COALESCE(e.direction_id, dep.direction_id, s.direction_id) AS resolved_direction_id,
@@ -207,7 +213,7 @@ async function getEmployeeUnit(employeeId, conn = pool) {
         [employeeId]
     );
     if (rows.length === 0) {
-        throw new Error(`Employee '${employeeId}' not found`);
+        throw new Error('Employé introuvable.');
     }
 
     const employee = rows[0];
@@ -233,10 +239,11 @@ async function getEmployeeUnit(employeeId, conn = pool) {
     if (employee.resolved_direction_id !== null) {
         return { ...employee, direction_id: employee.resolved_direction_id, unit_id: employee.resolved_direction_id, name: employee.direction_name, type: 'direction' };
     }
-    throw new Error(`Unit for employee '${employeeId}' not found`);
+    throw new Error(`Aucune unité trouvée pour cet employé.`);
 }
 
 async function getParentUnit(unitId, conn = pool) {
+    // helper function to get parent unit of an employee
     const unit = typeof unitId === 'object' ? unitId : await getEmployeeUnit(unitId, conn);
     if (unit.type === 'direction') {
         return null; 
@@ -251,12 +258,13 @@ async function getParentUnit(unitId, conn = pool) {
         [unit.direction_id]
     );
     if (rows.length === 0) {
-        throw new Error(`Direction '${unit.direction_id}' not found`);
+        throw new Error(`La direction de « ${unit.name} » est introuvable.`);
     }
     return { ...rows[0], type: 'direction' };
 }
 
 async function getHeadingUnit(unitId, conn = pool) {
+    // helper function to get heading of a unit
     const unit = typeof unitId === 'object' ? unitId : await getEmployeeUnit(unitId, conn);
     let query;
     let params;
@@ -302,7 +310,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
     // currentlocation_id is the id of the employee who is currently handling the request
     const [row] = await conn.query('SELECT * FROM Employe WHERE id = ?', [currentlocation_id]);
     if (!row[0]) {
-        throw new Error(`Employee '${currentlocation_id}' not found`);
+        throw new Error('Employé introuvable.');
     }
 
     const currentEmp = row[0];
@@ -325,7 +333,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             }
 
             if (!deptHead) {
-                throw new Error(`No department/direction head found for employee '${currentlocation_id}'`);
+                throw new Error(`Aucun chef de département/directeur trouvé pour ${currentEmp.nom} ${currentEmp.prenom}.`);
             }
             targetUnit = deptHead;
             await conn.query(
@@ -338,7 +346,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
         // Standard request submission from regular employee: forward to head of employee's unit (Service, Department, or Direction head)
         targetUnit = await getHeadingUnit(unitRow, conn);
         if (!targetUnit) {
-            throw new Error(`No head found for unit '${unitRow.unit_id}'`);
+            throw new Error(`Aucun responsable trouvé pour l'unité « ${unitRow.name} ».`);
         }
         await conn.query(
             'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -349,11 +357,11 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
         // Step approved by chef_service -> forward to head of parent department (or parent direction if no department)
         const parentUnit = await getParentUnit(unitRow, conn);
         if (!parentUnit) {
-            throw new Error(`No parent unit found for service '${unitRow.unit_id}'`);
+            throw new Error(`Aucune unité parente trouvée pour le service « ${unitRow.name} ».`);
         }
         targetUnit = await getHeadingUnit(parentUnit, conn);
         if (!targetUnit) {
-            throw new Error(`No head found for parent unit '${parentUnit.unit_id}'`);
+            throw new Error(`Aucun responsable trouvé pour l'unité parente « ${parentUnit.name} ».`);
         }
         await conn.query(
             'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -372,7 +380,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
                 // Fallback to any DRH if direction DRH not found
                 const [anyHrRows] = await conn.query('SELECT * FROM Employe WHERE role = ?', ['drh']);
                 if (anyHrRows.length === 0) {
-                    throw new Error('No HR employee found in system');
+                    throw new Error('Aucun employé RH trouvé dans le système.');
                 }
                 targetUnit = anyHrRows[0];
             } else {
@@ -381,7 +389,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
         }
 
         if (!targetUnit) {
-            throw new Error(`No target found for department head approval step`);
+            throw new Error(`Aucun destinataire trouvé pour l'approbation du chef de département.`);
         }
         await conn.query(
             'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -394,7 +402,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
         if (hrRows.length === 0) {
             const [anyHrRows] = await conn.query('SELECT * FROM Employe WHERE role = ?', ['drh']);
             if (anyHrRows.length === 0) {
-                throw new Error(`No HR employee found for direction '${unitRow.unit_id}'`);
+                throw new Error(`Aucun DRH trouvé pour la direction « ${unitRow.direction_name} ».`);
             }
             targetUnit = anyHrRows[0];
         } else {
@@ -410,19 +418,19 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
 
 async function assertRequestAccess(requestId, currentUserId, currentUserRole) {
     if (!requestId || !currentUserId) {
-        throw new Error('User authentication is required to access leave requests');
+        throw new Error('Authentification requise pour accéder aux demandes de congé.');
     }
 
     const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
     if (requestRows.length === 0) {
-        throw new Error(`Request '${requestId}' not found`);
+        throw new Error('Demande introuvable.');
     }
 
     const isOwner = Number(requestRows[0].Emp_id) === Number(currentUserId);
-    const isManager = ['head', 'hr'].includes(currentUserRole);
+    const isManager = ['admin', 'drh', 'head', 'hr'].includes(currentUserRole);
 
     if (!isOwner && !isManager) {
-        throw new Error('You are not authorized to access this leave request');
+        throw new Error(`Vous n'êtes pas autorisé à accéder à cette demande de congé.`);
     }
 
     return requestRows[0];
@@ -430,19 +438,19 @@ async function assertRequestAccess(requestId, currentUserId, currentUserRole) {
 
 async function assertStepAccess(stepId, currentUserId, currentUserRole) {
     if (!stepId || !currentUserId) {
-        throw new Error('User authentication is required to act on a request step');
+        throw new Error('Authentification requise pour traiter une étape de demande.');
     }
 
     const [stepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
     if (stepRows.length === 0) {
-        throw new Error(`Request step '${stepId}' not found`);
+        throw new Error('Étape de la demande introuvable.');
     }
 
     const isAssignedTarget = Number(stepRows[0].target_id) === Number(currentUserId);
-    const isManager = ['head', 'hr'].includes(currentUserRole);
+    const isManager = ['admin', 'drh', 'head', 'hr'].includes(currentUserRole);
 
     if (!isAssignedTarget && !isManager) {
-        throw new Error('You are not authorized to act on this request step');
+        throw new Error(`Vous n'êtes pas autorisé à traiter cette étape de la demande.`);
     }
 
     return stepRows[0];
@@ -464,12 +472,12 @@ async function createNotification({ targetId, requestId, content }, connection =
 
 function getRoleLabel(role) {
     return {
-        employe: 'employee',
-        chef_service: 'service head',
-        chef_departement: 'department head',
-        directeur: 'director',
-        drh: 'HR manager'
-    }[role] || role || 'user';
+        employe: 'employé',
+        chef_service: 'chef de service',
+        chef_departement: 'chef de département',
+        directeur: 'directeur',
+        drh: 'DRH'
+    }[role] || role || 'utilisateur';
 }
 
 const requestService = {
@@ -480,15 +488,15 @@ const requestService = {
 
         if (leaveType === 'exceptional') {
             if (!normalizedReasonType) {
-                throw new Error('A reason is required for exceptional leave');
+                throw new Error('Un motif est obligatoire pour un congé exceptionnel.');
             }
             if (!normalizedJustification) {
-                throw new Error('A justification is required for exceptional leave');
+                throw new Error('Une justification est obligatoire pour un congé exceptionnel.');
             }
         }
 
         if (duration !== undefined && duration !== null && Number(duration) !== effectiveDuration) {
-            throw new Error('Leave duration does not match the selected date range');
+            throw new Error('La durée du congé ne correspond pas à la période sélectionnée.');
         }
 
         const exerciseYear = exercise ?? getExerciseYearForDate(startDate);
@@ -497,7 +505,7 @@ const requestService = {
         try {
             const [employeeRows] = await connection.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
             if (employeeRows.length === 0) {
-                throw new Error(`Employee '${employeeId}' not found`);
+                throw new Error('Employé introuvable.');
             }
 
             const employeeRole = employeeRows[0].role;
@@ -510,7 +518,7 @@ const requestService = {
                 [employeeId, 'pending']
             );
             if (pendingRequests.length > 0) {
-                throw new Error(`Employee '${employeeId}' already has a pending request`);
+                throw new Error('Vous avez déjà une demande en attente.');
             }
 
             const [approvedRequests] = await connection.query(
@@ -544,7 +552,7 @@ const requestService = {
                 // if still have balance in previous exercise, throw error, because employee should use the balance first before requesting advance
                 const [priorExerciseRows] = await connection.query('SELECT * FROM Exercise WHERE Emp_id = ? AND year != ? AND balance > 0', [employeeId, exerciseYear]);
                 if (priorExerciseRows.length > 0) {
-                    throw new Error(`Employee '${employeeId}' still has balance in previous exercise year(s). Please use the available balance before requesting advance leave.`);
+                    throw new Error(`Vous disposez encore d'un solde dans un ou plusieurs exercices précédents. Veuillez utiliser ce solde avant de demander un congé par anticipation.`);
                 }
 
                 // Advance leave is capped at 30 days per exercise, cumulative across all
@@ -558,7 +566,7 @@ const requestService = {
                 );
                 const advanceUsedThisExercise = Number(advanceUsageRows[0].total_days) || 0;
                 if (advanceUsedThisExercise + effectiveDuration > 30) {
-                    throw new Error(`Advance leave cap of 30 days per exercise exceeded: ${advanceUsedThisExercise} day(s) already approved this exercise, ${effectiveDuration} more requested`);
+                    throw new Error(`La limite de 30 jours de congé par anticipation pour cet exercice est dépassée : ${advanceUsedThisExercise} jour(s) déjà approuvé(s), ${effectiveDuration} jour(s) supplémentaires demandés.`);
                 }
 
                 const [currentExerciseRows] = await connection.query('SELECT * FROM Exercise WHERE Emp_id = ? AND year = ?', [employeeId, exerciseYear]);
@@ -591,14 +599,14 @@ const requestService = {
     },
     async getRequestSteps(targetId, currentUserId, currentUserRole) {
         if (!currentUserId) {
-            throw new Error('User authentication is required to access request steps');
+            throw new Error('Authentification requise pour accéder aux étapes des demandes.');
         }
 
         const isOwnTarget = Number(targetId) === Number(currentUserId);
-        const isManager = ['head', 'hr'].includes(currentUserRole);
+        const isManager = ['admin', 'drh', 'head', 'hr'].includes(currentUserRole);
 
         if (!isOwnTarget && !isManager) {
-            throw new Error('You are not authorized to view these request steps');
+            throw new Error(`Vous n'êtes pas autorisé à consulter ces étapes.`);
         }
 
         const [steps] = await pool.query('SELECT * FROM Request_step WHERE target_id = ?', [targetId]);
@@ -649,7 +657,7 @@ const requestService = {
     },
     async updateRequestStep(stepId, decision, comment, currentUserId, currentUserRole) {
         if (decision !== 'approved' && decision !== 'rejected') {
-            throw new Error(`Invalid decision '${decision}'. Must be 'approved' or 'rejected'.`);
+            throw new Error(`Décision invalide « ${decision} ». Valeurs acceptées : 'approved' ou 'rejected'.`);
         }
 
         const step = await assertStepAccess(stepId, currentUserId, currentUserRole);
@@ -659,11 +667,11 @@ const requestService = {
             if (targetRows[0].role === 'drh') {
                 const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [step.request_id]);
                 if (requestRows.length === 0) {
-                    throw new Error(`Request '${step.request_id}' not found`);
+                    throw new Error('Demande introuvable.');
                 }
 
                 if (requestRows[0].request_status === 'approved') {
-                    return { requestId: step.request_id, message: 'Request already approved' };
+                    return { requestId: step.request_id, message: 'Demande déjà approuvée' };
                 }
 
                 await pool.query(
@@ -682,13 +690,13 @@ const requestService = {
                     content: `Votre demande de congé du ${requestRows[0].start_date} a été approuvée.`
                 });
 
-                return { requestId: step.request_id, message: 'Request approved and marked as completed' };
+                return { requestId: step.request_id, message: 'Demande approuvée et finalisée' };
             }
 
             await pool.query('UPDATE Request_step SET decision = ?, comment = ?, decided_at = NOW() WHERE step_id = ?', [decision, comment, stepId]);
             const [updatedStepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
             if (updatedStepRows.length === 0) {
-                throw new Error(`Request step '${stepId}' not found`);
+                throw new Error('Étape de la demande introuvable.');
             }
 
             const requestId = updatedStepRows[0].request_id;
@@ -714,13 +722,13 @@ const requestService = {
         await pool.query('UPDATE Request_step SET decision = ?, comment = ?, decided_at = NOW() WHERE step_id = ?', [decision, comment, stepId]);
         const [rejectedStepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
         if (rejectedStepRows.length === 0) {
-            throw new Error(`Request step '${stepId}' not found`);
+            throw new Error('Étape de la demande introuvable.');
         }
 
         const requestId = rejectedStepRows[0].request_id;
         const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
         if (requestRows.length === 0) {
-            throw new Error(`Request '${requestId}' not found`);
+            throw new Error('Demande introuvable.');
         }
 
         await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['rejected', requestId]);
@@ -735,11 +743,11 @@ const requestService = {
         const request = await assertRequestAccess(requestId, currentUserId, currentUserRole);
         const isOwner = Number(request.Emp_id) === Number(currentUserId);
         if (!isOwner) {
-            throw new Error('You are not authorized to cancel this leave request');
+            throw new Error(`Vous n'êtes pas autorisé à annuler cette demande de congé.`);
         }
 
         if (!['pending', 'approved'].includes(request.request_status)) {
-            throw new Error(`Request cannot be cancelled from status '${request.request_status}'`);
+            throw new Error(`Une demande au statut « ${request.request_status} » ne peut pas être annulée.`);
         }
 
         let daysToRefund = 0;
@@ -760,7 +768,7 @@ const requestService = {
                 const elapsedDays = Math.floor((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
                 daysToRefund = Math.max(duration - elapsedDays, 0);
             } else {
-                throw new Error('This leave has already ended and cannot be cancelled');
+                throw new Error('Ce congé est déjà terminé et ne peut plus être annulé.');
             }
         }
 
@@ -805,7 +813,7 @@ const requestService = {
             }
         }
 
-        return { requestId, message: 'Request cancelled successfully', daysRefunded: daysToRefund };
+        return { requestId, message: 'Demande annulée avec succès', daysRefunded: daysToRefund };
     },
     async getRequestDetails(requestId, currentUserId, currentUserRole) {
         await assertRequestAccess(requestId, currentUserId, currentUserRole);

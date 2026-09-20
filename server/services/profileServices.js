@@ -3,6 +3,7 @@ const { mapRole, getRoleLabel, getEmployeeUnit } = require('../utils/helpers');
 
 
 const profileService = {
+    // get all employee infos: personal info, exercise info, and historic leaves requests
     async getEmployeeProfile(employeeId) {
         const [rows] = await pool.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
         if (rows.length === 0) {
@@ -150,6 +151,7 @@ const profileService = {
     },
 
     async getUnderemployees(employeeId) {
+        // return info about direct reports belongs to specific unit under specific chef
         const [rows] = await pool.query(
             `SELECT e.*, d.nom AS direction_name, dep.nom AS departement_name, s.nom AS service_name
              FROM Employe e
@@ -195,7 +197,9 @@ const profileService = {
         }));
     },
 
+
     async getAllEmployees() {
+        // return personal info for all users needed by admin
         const [employees] = await pool.query(
             `SELECT e.*, d.nom AS direction_name, dep.nom AS departement_name, s.nom AS service_name
              FROM Employe e

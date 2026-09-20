@@ -1,0 +1,43 @@
+services:
+  db:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: Raouf=0messi
+      MYSQL_DATABASE: leave_management
+      MYSQL_USER: leave_user
+      MYSQL_PASSWORD: Raouf=0messi
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./Leave_mangement_system.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  backend:
+    build: ./server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: leave_user
+      DB_PASSWORD: Raouf=0messi
+      DB_NAME: leave_management
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./client
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:

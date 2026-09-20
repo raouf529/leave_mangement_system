@@ -1,5 +1,6 @@
 const adminServices = require('../services/adminServices');
 const backgroundService = require('../services/backgroundService');
+const requestService = require('../services/requestServices');
 
 const adminController = {
     async getLeaveRequests(req, res) {
@@ -71,12 +72,18 @@ const adminController = {
     },
     async updateRequestStepDecision(req, res) {
         try {
-            const { stepId, decision } = req.body;
+            const { stepId, decision, comment } = req.body;
             if (stepId === undefined || !decision) {
                 return res.status(400).json({ error: 'L’identifiant de l’étape et la décision sont requis.' });
             }
-            const result = await adminServices.updateRequestStepDecision(Number(stepId), decision);
-            res.status(200).json(result);
+            const result = await requestService.updateRequestStep(
+                Number(stepId),
+                decision,
+                comment ?? '',
+                req.user?.id,
+                req.user?.role
+            );
+            res.status(200).json({ message: 'Request step updated successfully', ...result });
         } catch (error) {
             res.status(400).json({ error: error.message });
         }
@@ -92,8 +99,14 @@ const adminController = {
                 return res.status(200).json(result);
             }
             if (decision !== undefined) {
-                const result = await adminServices.updateRequestStepDecision(Number(stepId), decision);
-                return res.status(200).json(result);
+                const result = await requestService.updateRequestStep(
+                    Number(stepId),
+                    decision,
+                    req.body.comment ?? '',
+                    req.user?.id,
+                    req.user?.role
+                );
+                return res.status(200).json({ message: 'Request step updated successfully', ...result });
             }
             return res.status(400).json({ error: 'Un nouveau rôle ou une décision est requis.' });
         } catch (error) {

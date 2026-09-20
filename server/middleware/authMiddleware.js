@@ -53,7 +53,7 @@ const authorizeRequestAccess = async (req, res, next) => {
         }
 
         const isOwner = Number(requestRows[0].Emp_id) === Number(req.user.id);
-        const isManager = ['head', 'hr'].includes(req.user.role);
+        const isManager = ['admin', 'drh', 'head', 'hr'].includes(req.user.role);
 
         if (isOwner || isManager) {
             return next();
@@ -82,7 +82,7 @@ const authorizeRequestStepAccess = async (req, res, next) => {
         }
 
         const isAssignedTarget = Number(stepRows[0].target_id) === Number(req.user.id);
-        const isManager = ['head', 'hr'].includes(req.user.role);
+        const isManager = ['admin', 'drh', 'head', 'hr'].includes(req.user.role);
 
         if (isAssignedTarget || isManager) {
             return next();
@@ -106,7 +106,7 @@ const authorizeRequestTargetAccess = (req, res, next) => {
         }
 
         const isOwnTarget = Number(targetId) === Number(req.user.id);
-        const isManager = ['head', 'hr'].includes(req.user.role);
+        const isManager = ['admin', 'drh', 'head', 'hr'].includes(req.user.role);
 
         if (isOwnTarget || isManager) {
             return next();
