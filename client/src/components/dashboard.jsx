@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
-import { useNavigate } from 'react-router-dom';
 import api from './api';
 import Header from './header';
 import LeaveRequestModal from './LeaveRequestModal';
@@ -7,11 +6,6 @@ import LeaveRequestModal from './LeaveRequestModal';
 
 async function getInformation() {
   const response = await api.get('/profile/me');
-  return response.data;
-}
-
-async function getMyPendingSteps() {
-  const response = await api.get('/request/steps/me');
   return response.data;
 }
 
@@ -24,6 +18,14 @@ const LEAVE_TYPE_LABELS = {
   annual: 'Congé annuel',
   exceptional: 'Congé exceptionnel',
   advance: 'Avance sur congé'
+};
+
+const ROLE_LABELS = {
+  employe: 'Employé',
+  chef_service: 'Chef de service',
+  chef_departement: 'Chef de département',
+  directeur: 'Directeur',
+  drh: 'DRH'
 };
 
 const STATUS_LABELS = {
@@ -104,8 +106,6 @@ function Dashboard() {
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterActive, setFilterActive] = useState(false);
 
-  const navigate = useNavigate();
-
   const [confirmCancelRequest, setConfirmCancelRequest] = useState(null);
 
   function toggleDetails(requestId) {
@@ -168,6 +168,10 @@ function Dashboard() {
   const activeExercises = (employeeInfo?.exercises ?? []).filter(
     (ex) => Number(ex.balance) > 0
   );
+  // Total of the closed exercises only (the current exercise is not counted)
+  const pastExercisesBalance = activeExercises
+    .filter((ex) => !isCurrentExercise(ex.exercise))
+    .reduce((sum, ex) => sum + Number(ex.balance || 0), 0);
   const rawRequests = employeeInfo?.leaveRequests ?? [];
   // Sort from oldest to newest using created_at (or id as fallback)
   const leaveRequests = [...rawRequests].sort((a, b) => {
@@ -215,8 +219,6 @@ function Dashboard() {
 
   const lastRequestEndDate = lastRequest ? getEndDate(lastRequest.startDate, lastRequest.duration) : null;
   const lastRequestStepLabel = getCurrentStepLabel(lastRequest);
-  const totalBalance = activeExercises.reduce((sum, ex) => sum + Number(ex.balance || 0), 0);
-
   return (
     <div className="leave-dashboard">
       <style>{`
@@ -227,66 +229,177 @@ function Dashboard() {
           --canvas: #F5F7FA;
           --border: #E4E8ED;
           --primary: #1F5673;
-          --accent-amber: #C98A2C;
-          --amber-soft: #FBF1DF;
-          --success: #3E8A5F;
-          --success-soft: #E7F4EC;
-          --danger: #C1544A;
-          --danger-soft: #FBEAE8;
+          --primary-hover: #184559;
+          --primary-soft: #E8F0F4;
+          --accent-amber: #8A5300;
+          --amber-soft: #FFF3D6;
+          --success: #13694D;
+          --success-soft: #DDF3EA;
+          --danger: #B03A2E;
+          --danger-soft: #FBEBE9;
           --neutral-soft: #EEF1F4;
           min-height: 100vh;
           background: var(--canvas);
           color: var(--ink);
+          font-variant-numeric: tabular-nums;
         }
-        .hero-strip { background: var(--surface); border-bottom: 1px solid var(--border); }
-        .hero-label { color: var(--muted); font-size: 0.85rem; }
-        .hero-number { font-size: 2.5rem; font-weight: 700; line-height: 1; color: var(--primary); }
-        .section-card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); }
-        .section-title { font-size: 1.25rem; font-weight: 600; color: var(--ink); }
-        .exercise-card { border-left: 3px solid #D8DEE5; background: #FAFBFC; border-radius: 10px; padding: 1.1rem 1.25rem; }
-        .exercise-card p { font-size: 1rem; }
-        .exercise-balance { font-size: 1.85rem; font-weight: 700; }
+        .leave-dashboard :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        /* Typography: page title > section title > body */
+        .leave-dashboard .page-title { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; color: var(--ink); }
+        .hero-label { color: var(--muted); font-size: 0.875rem; }
+        .section-title { font-size: 1.125rem; font-weight: 600; color: var(--ink); }
+        .muted-note { font-size: 0.9rem; color: var(--muted); }
+
+        /* Cards */
+        .section-card {
+          position: relative;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          box-shadow: 0 1px 2px rgba(27, 36, 48, 0.05);
+          padding: 1.25rem;
+        }
+        @media (min-width: 768px) { .section-card { padding: 1.75rem; } }
+
+        .last-request-card { overflow: hidden; }
+        .last-request-card::before {
+          content: '';
+          position: absolute; top: 0; bottom: 0; left: 0; width: 4px;
+          background: var(--status-color, var(--border));
+        }
+        .last-request-card .section-title { font-size: 1.35rem; }
+        .last-request-label { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+        .reject-note {
+          background: var(--danger-soft); color: var(--danger);
+          border: 1px solid #EBC5C0; border-radius: 10px;
+          padding: 0.85rem 1rem; font-size: 0.92rem; line-height: 1.5;
+        }
         .split-list { font-size: 0.95rem; }
-        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.88rem; font-weight: 600; }
+
+        /* Exercise balances */
+        .total-balance {
+          display: inline-flex; align-items: baseline; gap: 0.6rem;
+          padding: 0.4rem 0.9rem; border-radius: 999px;
+          background: var(--primary-soft);
+        }
+        .total-balance-label { font-size: 0.875rem; color: var(--muted); }
+        .total-balance-value { font-size: 1.05rem; font-weight: 700; color: var(--primary); }
+        .exercise-card {
+          display: flex; flex-direction: column;
+          border: 1px solid var(--border); background: var(--surface);
+          border-radius: 12px; padding: 1.25rem;
+        }
+        .exercise-card.current { border-color: var(--primary); background: var(--primary-soft); }
+        .exercise-name { font-weight: 600; color: var(--ink); }
+        .exercise-balance {
+          margin-top: auto; padding-top: 1rem;
+          font-size: 2.1rem; font-weight: 700; line-height: 1; color: var(--primary);
+        }
+        .exercise-unit { margin-left: 0.15rem; font-size: 0.95rem; font-weight: 500; color: var(--muted); }
+        .current-pill {
+          display: inline-block; padding: 0.15rem 0.6rem; border-radius: 999px;
+          background: var(--primary); color: #fff; font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+        }
+
+        /* Status badge */
+        .status-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 0.25rem 0.7rem; border-radius: 999px;
+          font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+        }
         .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-        .muted-note { font-size: 0.92rem; color: var(--muted); }
-        .cancel-btn { border: 1px solid var(--border); color: var(--ink); background: #fff; font-size: 0.9rem; }
-        .history-table { font-size: 0.98rem; }
-        .history-table thead th { font-size: 0.85rem; color: var(--muted); text-transform: none; padding-bottom: 0.75rem; }
-        .history-table td { padding-top: 1rem; padding-bottom: 1rem; }
-        .info-btn { border: 1px solid var(--border); background: #fff; color: var(--primary); font-size: 0.88rem; }
-        .detail-row td { background: var(--canvas); border-top: none; padding-top: 0.9rem; padding-bottom: 1.1rem; font-size: 0.92rem; }
-        .detail-grid { display: flex; flex-direction: column; gap: 0.65rem; }
-        .detail-item { display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; align-items: baseline; }
-        .detail-label { font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); min-width: 130px; }
+
+        /* Buttons (explicit hover/disabled states so Bootstrap defaults don't leak in) */
+        .leave-dashboard .btn { border-radius: 9px; }
+        .leave-dashboard .btn-brand { background: var(--primary); color: #fff; border: 1px solid var(--primary); font-weight: 500; }
+        .leave-dashboard .btn-brand:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); color: #fff; }
+        .leave-dashboard .info-btn,
+        .leave-dashboard .cancel-btn {
+          border: 1px solid var(--border); background: var(--surface);
+          font-size: 0.85rem; font-weight: 500; white-space: nowrap;
+        }
+        .leave-dashboard .info-btn { color: var(--primary); }
+        .leave-dashboard .info-btn:hover { background: var(--primary-soft); border-color: var(--primary-soft); color: var(--primary); }
+        .leave-dashboard .cancel-btn { color: var(--ink); }
+        .leave-dashboard .cancel-btn:hover:not(:disabled) { background: var(--danger-soft); border-color: #EBC5C0; color: var(--danger); }
+        .leave-dashboard .cancel-btn:disabled { opacity: 0.45; }
+        .leave-dashboard .btn-outline-neutral { border: 1px solid var(--border); background: var(--surface); color: var(--ink); }
+        .leave-dashboard .btn-outline-neutral:hover:not(:disabled) { background: var(--canvas); color: var(--ink); }
+        .leave-dashboard .btn-danger-solid { background: var(--danger); color: #fff; border: 1px solid var(--danger); font-weight: 500; }
+        .leave-dashboard .btn-danger-solid:hover:not(:disabled) { background: #952F25; border-color: #952F25; color: #fff; }
+
+        /* Filters and form controls */
+        .filter-input, .filter-select { width: 150px; font-size: 0.875rem; }
+        @media (max-width: 575.98px) {
+          .filter-input, .filter-select { width: 100%; flex: 1 1 140px; }
+        }
+        .leave-dashboard .form-control,
+        .leave-dashboard .form-select { border-color: #CDD4DC; border-radius: 10px; color: var(--ink); }
+        .leave-dashboard .form-control:focus,
+        .leave-dashboard .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16); }
+        .leave-dashboard .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
+        .leave-dashboard .form-check-input:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16); }
+
+        /* History table */
+        .leave-dashboard .table-responsive { border: 1px solid var(--border); border-radius: 12px; }
+        .history-table { --bs-table-bg: transparent; font-size: 0.93rem; }
+        .history-table thead th {
+          font-size: 0.8rem; font-weight: 600; color: var(--muted);
+          padding: 0.75rem 1rem; background: var(--canvas);
+          border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
+        .history-table td { padding: 0.85rem 1rem; border-color: var(--border); }
+        .history-table tbody tr:last-child > td { border-bottom: none; }
+        .history-table.table > tbody > tr:not(.detail-row):hover > td { background: #FAFBFC; }
+        .history-table .detail-row > td { background: var(--canvas); padding-top: 0.9rem; padding-bottom: 1.1rem; }
+        .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem 1.5rem; }
+        .detail-item { display: flex; flex-direction: column; gap: 0.15rem; }
+        .detail-label { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
         .detail-value { font-size: 0.92rem; color: var(--ink); }
-        .last-request-card { border-left-width: 4px; border-left-style: solid; }
-        .last-request-label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+
+        /* Empty, loading, alerts */
+        .empty-state {
+          text-align: center; color: var(--muted); font-size: 0.92rem;
+          padding: 1.75rem 1rem; border: 1px dashed #CDD4DC; border-radius: 12px; background: var(--canvas);
+        }
+        .loading-state { display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 3rem 0; color: var(--muted); }
+        .leave-dashboard .alert-danger {
+          background: var(--danger-soft); color: var(--danger);
+          border: 1px solid #EBC5C0; border-radius: 10px;
+        }
+
+        /* Cancel confirmation modal */
         .custom-modal-backdrop {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(15, 23, 42, 0.45);
+          position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(27, 36, 48, 0.5);
           backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1050;a
+          display: flex; align-items: center; justify-content: center;
+          z-index: 1050;
         }
         .custom-modal {
-          background: #fff;
+          background: var(--surface);
           border-radius: 16px;
-          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-          max-width: 480px;
-          width: 90%;
+          box-shadow: 0 20px 40px -12px rgba(27, 36, 48, 0.25);
+          max-width: 480px; width: 90%;
           overflow: hidden;
           animation: modalAppear 0.2s ease-out;
+        }
+        .confirm-icon {
+          width: 42px; height: 42px; flex: none; border-radius: 50%;
+          background: var(--danger-soft); color: var(--danger);
+          display: flex; align-items: center; justify-content: center;
+        }
+        .warn-note {
+          background: var(--amber-soft); border: 1px solid #E8CD8A; color: #6B4300;
+          border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.9rem; line-height: 1.5;
         }
         @keyframes modalAppear {
           from { opacity: 0; transform: scale(0.96); }
           to { opacity: 1; transform: scale(1); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .custom-modal { animation: none; }
         }
       `}</style>
 
@@ -296,27 +409,22 @@ function Dashboard() {
         EmployeeRoleLabel={employeeInfo ? employeeInfo.roleLabel : ''}
       />
 
-      <div className="hero-strip py-4 py-md-5">
-        <div className="container d-flex flex-wrap align-items-end justify-content-between gap-3">
-          <div>
-            <p className="hero-label mb-1">Espace employé</p>
-            <h1 className="h3 fw-bold mb-0">
+      <main className="container py-4">
+        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+          <div className="d-flex flex-wrap align-items-baseline gap-2 gap-md-3">
+            <h1 className="page-title mb-0">
               Bonjour{employeeInfo ? `, ${employeeInfo.firstName}` : ''}
             </h1>
+            <span className="hero-label">Espace employé</span>
           </div>
-          <div className="d-flex align-items-end gap-4">
-            <button
-              className="btn btn-lg"
-              style={{ background: 'var(--primary)', color: '#fff' }}
-              onClick={() => setShowRequestModal(true)}
-            >
-              Demander un congé
-            </button>
-          </div>
+          <button
+            className="btn btn-brand px-4"
+            onClick={() => setShowRequestModal(true)}
+          >
+            Demander un congé
+          </button>
         </div>
-      </div>
 
-      <main className="container py-4 py-md-5">
         {error && (
           <div className="alert alert-danger py-2 small" role="alert">
             {error}
@@ -324,16 +432,19 @@ function Dashboard() {
         )}
 
         {loading ? (
-          <div className="text-center py-5" style={{ color: 'var(--muted)' }}>Chargement...</div>
+          <div className="loading-state" role="status">
+            <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+            Chargement...
+          </div>
         ) : (
           <>
             <section
-              className="section-card p-4 p-md-5 mb-4 last-request-card"
-              style={{ borderLeftColor: lastRequest ? (STATUS_STYLES[lastRequest.status]?.fg ?? 'var(--border)') : 'var(--border)' }}
+              className="section-card mb-4 last-request-card"
+              style={{ '--status-color': lastRequest ? (STATUS_STYLES[lastRequest.status]?.fg ?? 'var(--border)') : 'var(--border)' }}
             >
               <p className="last-request-label mb-2">Dernière demande</p>
               {!lastRequest ? (
-                <p className="muted-note mb-0">Aucune demande de congé pour le moment.</p>
+                <p className="empty-state mb-0">Aucune demande de congé pour le moment.</p>
               ) : (
                 <>
                   <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
@@ -362,10 +473,10 @@ function Dashboard() {
                   </div>
 
                   {lastRequest.status === 'rejected' && (
-                    <div
-                      className="p-3 mb-3 rounded-3"
-                      style={{ background: 'var(--danger-soft)', color: 'var(--danger)', fontSize: '0.92rem' }}
-                    >
+                    <div className="reject-note mb-3">
+                      {lastRequest.rejectedByName && (
+                        <div><strong>Refusée par :</strong> {lastRequest.rejectedByName}</div>
+                      )}
                       <strong>Motif du refus :</strong> {lastRequest.rejectionReason || 'Aucune raison détaillée.'}
                     </div>
                   )}
@@ -392,10 +503,20 @@ function Dashboard() {
               )}
             </section>
 
-            <section className="section-card p-4 p-md-5 mb-4">
-              <h2 className="section-title mb-4">Exercices</h2>
+            <section className="section-card mb-4">
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+                <h2 className="section-title mb-0">Exercices</h2>
+                {activeExercises.length > 0 && (
+                  <div className="total-balance">
+                    <span className="total-balance-label">Total hors exercice en cours</span>
+                    <span className="total-balance-value">
+                      {Number(pastExercisesBalance.toFixed(2))} {pastExercisesBalance > 1 ? 'jours' : 'jour'}
+                    </span>
+                  </div>
+                )}
+              </div>
               {activeExercises.length === 0 ? (
-                <p className="muted-note mb-0">Aucun solde disponible pour le moment.</p>
+                <p className="empty-state mb-0">Aucun solde disponible pour le moment.</p>
               ) : (
                 <div className="row g-3">
                   {activeExercises.map((exercise, index) => {
@@ -403,16 +524,18 @@ function Dashboard() {
                     const current = isCurrentExercise(exercise.exercise);
                     return (
                       <div className="col-12 col-sm-6 col-md-4" key={index}>
-                        <div className="exercise-card h-100">
-                          <p className="fw-semibold mb-1">
-                            {range ? `Exercice ${range.startYear} / ${range.endYear}` : exercise.exercise}
-                          </p>
-                          {range && <p className="muted-note mb-3">Du {range.from} au {range.to}</p>}
-                          <p className="exercise-balance mb-1" style={{ color: 'var(--primary)' }}>
+                        <div className={`exercise-card h-100${current ? ' current' : ''}`}>
+                          <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                            <p className="exercise-name mb-0">
+                              {range ? `Exercice ${range.startYear} / ${range.endYear}` : exercise.exercise}
+                            </p>
+                            {current && <span className="current-pill">Exercice en cours</span>}
+                          </div>
+                          {range && <p className="muted-note mb-0 mt-1">Du {range.from} au {range.to}</p>}
+                          <p className="exercise-balance mb-0">
                             {exercise.balance}{' '}
-                            <span style={{ fontSize: '1rem', fontWeight: 500, color: 'var(--muted)' }}>jours</span>
+                            <span className="exercise-unit">jours</span>
                           </p>
-                          {current && <p className="muted-note mb-0">Exercice en cours</p>}
                         </div>
                       </div>
                     );
@@ -421,7 +544,7 @@ function Dashboard() {
               )}
             </section>
 
-            <section className="section-card p-4 p-md-5">
+            <section className="section-card">
               <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
                 <h2 className="section-title mb-0">Historique des demandes</h2>
                 <div className="d-flex flex-wrap gap-2 align-items-center">
@@ -429,8 +552,8 @@ function Dashboard() {
                     <input className="form-check-input mt-0" type="checkbox" role="switch" id="activeLeaveSwitch" checked={filterActive} onChange={(e) => setFilterActive(e.target.checked)} />
                     <label className="form-check-label small fw-medium" htmlFor="activeLeaveSwitch">Congés actifs</label>
                   </div>
-                  <input type="date" className="form-control filter-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} style={{ width: '150px' }} title="Date de début exacte" />
-                  <select className="form-select filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ width: '150px' }}>
+                  <input type="date" className="form-control filter-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} title="Date de début exacte" />
+                  <select className="form-select filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                     <option value="all">Tous statuts</option>
                     <option value="pending">En attente</option>
                     <option value="approved">Approuvée</option>
@@ -441,7 +564,7 @@ function Dashboard() {
                 </div>
               </div>
               {filteredLeaveRequests.length === 0 ? (
-                <p className="muted-note mb-0">Aucune demande de congé correspondante.</p>
+                <p className="empty-state mb-0">Aucune demande de congé correspondante.</p>
               ) : (
                 <div className="table-responsive">
                   <table className="history-table table align-middle mb-0">
@@ -462,7 +585,7 @@ function Dashboard() {
                         const annualSplit = lr.leaveType === 'annual' && lr.allocations?.length
                           ? lr.allocations.map((allocation) => `Exercice ${allocation.year} : ${allocation.daysAllocated} j`).join(' · ')
                           : null;
-                        const hasDetails = Boolean(annualSplit || (lr.status === 'pending' && currentStepLabel) || rejectionNote);
+                        const hasDetails = Boolean(annualSplit || (lr.status === 'pending' && currentStepLabel) || rejectionNote || lr.createdByName);
                         const isExpanded = expandedId === lr.id;
 
                         return (
@@ -476,7 +599,7 @@ function Dashboard() {
                               <td>{lr.duration} j</td>
                               <td><StatusBadge status={lr.status} /></td>
                               <td>
-                                <div className="d-flex gap-2">
+                                <div className="d-flex flex-wrap gap-2">
                                   {hasDetails && (
                                     <button
                                       className="btn btn-sm info-btn"
@@ -517,6 +640,22 @@ function Dashboard() {
                                         <span className="detail-value" style={{ color: 'var(--danger)' }}>{rejectionNote}</span>
                                       </div>
                                     )}
+                                    {lr.status === 'rejected' && lr.rejectedByName && (
+                                      <div className="detail-item">
+                                        <span className="detail-label">Refusée par</span>
+                                        <span className="detail-value" style={{ color: 'var(--danger)' }}>
+                                          {lr.rejectedByName}{lr.rejectedByRole ? ` (${lr.rejectedByRole})` : ''}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {lr.createdByName && (
+                                      <div className="detail-item">
+                                        <span className="detail-label">Créée par</span>
+                                        <span className="detail-value">
+                                          {lr.createdByName}{lr.createdByRole ? ` (${ROLE_LABELS[lr.createdByRole] ?? lr.createdByRole})` : ''}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -537,22 +676,8 @@ function Dashboard() {
         <div className="custom-modal-backdrop" onClick={() => setConfirmCancelRequest(null)}>
           <div className="custom-modal p-4" onClick={(e) => e.stopPropagation()}>
             <div className="d-flex align-items-center gap-3 mb-3">
-              <div
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '50%',
-                  background: 'var(--danger-soft)',
-                  color: 'var(--danger)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.25rem',
-                  fontWeight: 'bold',
-                  flexShrink: 0
-                }}
-              >
-                ⚠️
+              <div className="confirm-icon" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
               </div>
               <h5 className="mb-0 fw-bold">Confirmer l'annulation</h5>
             </div>
@@ -562,10 +687,7 @@ function Dashboard() {
             </p>
 
             {confirmCancelRequest.status === 'approved' && (
-              <div
-                className="p-3 mb-3 rounded-3"
-                style={{ background: 'var(--amber-soft)', border: '1px solid var(--accent-amber)', color: '#795000', fontSize: '0.9rem' }}
-              >
+              <div className="warn-note mb-3">
                 <strong>Attention :</strong> Cette demande est déjà <strong>approuvée</strong>.
                 Si vous l'annulez, l'annulation repartira du début dans la chaîne de validation (circuit de signature), et le solde de jours ne sera restitué qu'une fois l'annulation validée.
               </div>
@@ -574,7 +696,7 @@ function Dashboard() {
             <div className="d-flex justify-content-end gap-2 mt-4">
               <button
                 type="button"
-                className="btn btn-light px-4"
+                className="btn btn-outline-neutral px-4"
                 onClick={() => setConfirmCancelRequest(null)}
                 disabled={Boolean(cancelingId)}
               >
@@ -582,7 +704,7 @@ function Dashboard() {
               </button>
               <button
                 type="button"
-                className="btn btn-danger px-4"
+                className="btn btn-danger-solid px-4"
                 onClick={handleConfirmCancel}
                 disabled={Boolean(cancelingId)}
               >

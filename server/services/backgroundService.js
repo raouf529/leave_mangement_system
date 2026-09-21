@@ -60,7 +60,7 @@ const backgroundService = {
         }
     },
     // Executed on the 1st of each month:
-    // Adds 2.5 balance for each employee (calculates pro-rated balance for newly recruited employees in their first month).
+    // Adds 2.5 balance for each employee
     async updateExerciseBalances() {
         try {
             const [employees] = await pool.query('SELECT id, date_entree FROM Employe');
@@ -68,19 +68,7 @@ const backgroundService = {
             const exerciseYear = getExerciseYearForDate(now);
 
             for (const employee of employees) {
-                const hireDate = new Date(employee.date_entree);
-                const isNewEmployee = (
-                    hireDate.getFullYear() === now.getFullYear() &&
-                    hireDate.getMonth() === now.getMonth()
-                );
-
                 let balanceToAdd = 2.5;
-
-                if (isNewEmployee) {
-                    const diffTime = Math.max(0, now - hireDate);
-                    const attendedDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                    balanceToAdd = assignBalance(attendedDays);
-                }
 
                 // Ensure an Exercise record exists for this exercise year, then add the balance.
                 // INSERT IGNORE + always-UPDATE is safe whether or not admin already created the row

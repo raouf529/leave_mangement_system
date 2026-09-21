@@ -1,5 +1,6 @@
 const jws = require('jsonwebtoken');
 const pool = require('../db');
+const { isSuperiorOf } = require('../services/requestServices');
 
 // Middleware to authenticate JWT token (read from the httpOnly cookie)
 const authenticateToken = (req, res, next) => {
@@ -76,15 +77,22 @@ const authorizeRequestStepAccess = async (req, res, next) => {
             return next();
         }
 
-        const [stepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
+        const [stepRows] = await pool.query(
+            `SELECT rs.*, lr.request_status
+             FROM Request_step rs
+             JOIN Leave_request lr ON lr.request_id = rs.request_id
+             WHERE rs.step_id = ?`,
+            [stepId]
+        );
         if (stepRows.length === 0) {
             return res.status(404).json({ message: 'L’étape de la demande de congé est introuvable.' });
         }
 
         const isAssignedTarget = Number(stepRows[0].target_id) === Number(req.user.id);
         const isManager = ['admin', 'drh', 'head', 'hr'].includes(req.user.role);
+        const isSuperior = await isSuperiorOf(req.user.id, stepRows[0].target_id);
 
-        if (isAssignedTarget || isManager) {
+        if (isAssignedTarget || isManager || isSuperior) {
             return next();
         }
 

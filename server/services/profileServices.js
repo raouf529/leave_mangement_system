@@ -29,7 +29,16 @@ const profileService = {
         const employee = employees[0];
         const unit = getEmployeeUnit(employee);
         const [exercises] = await pool.query('SELECT * FROM Exercise WHERE Emp_id = ?', [employeeId]);
-        const [leaveRequests] = await pool.query('SELECT * FROM Leave_request WHERE Emp_id = ?', [employeeId]);
+        const [leaveRequests] = await pool.query(
+            `SELECT lr.*,
+                    creator.nom AS creator_last_name,
+                    creator.prenom AS creator_first_name,
+                    creator.role AS creator_role
+             FROM Leave_request lr
+             LEFT JOIN Employe creator ON creator.id = lr.created_by
+             WHERE lr.Emp_id = ?`,
+            [employeeId]
+        );
 
         let requestAllocations = [];
         let requestSteps = [];
@@ -92,6 +101,7 @@ const profileService = {
 
         return {
             id: employee.id,
+            matricule: employee.matricule,
             firstName: employee.prenom,
             lastName: employee.nom,
             email: rows[0].email,
@@ -118,6 +128,10 @@ const profileService = {
                     duration: lr.duration,
                     status: lr.request_status,
                     leaveType: lr.leave_type,
+                    createdByName: lr.creator_first_name && lr.creator_last_name
+                        ? `${lr.creator_first_name} ${lr.creator_last_name}`
+                        : null,
+                    createdByRole: lr.creator_role ?? null,
                     allocations: allocationsByRequest[lr.request_id] ?? [],
                     currentStep: currentStep
                         ? {
@@ -129,7 +143,11 @@ const profileService = {
                             kind: currentStep.target_role === 'hr' ? 'hr' : currentStep.target_role === 'head' ? 'unit' : 'person'
                           }
                         : null,
-                    rejectionReason: rejectedStep?.comment ?? null
+                    rejectionReason: rejectedStep?.comment ?? null,
+                    rejectedByName: rejectedStep
+                        ? `${rejectedStep.prenom ?? ''} ${rejectedStep.nom ?? ''}`.trim() || null
+                        : null,
+                    rejectedByRole: rejectedStep?.target_role ?? null
                 };
             })
         };
@@ -188,6 +206,7 @@ const profileService = {
 
         return underemployees.map(emp => ({
             id: emp.id,
+            matricule: emp.matricule,
             firstName: emp.prenom,
             lastName: emp.nom,
             email: emp.email,
@@ -209,6 +228,7 @@ const profileService = {
         );
         return employees.map(emp => ({
             id: emp.id,
+            matricule: emp.matricule,
             firstName: emp.prenom,
             lastName: emp.nom,
             email: emp.email,

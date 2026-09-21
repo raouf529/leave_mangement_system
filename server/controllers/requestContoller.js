@@ -9,7 +9,7 @@ const requestController = {
             if (!employeeId) {
                 return res.status(401).json({ error: 'Vous devez être connecté pour effectuer cette action.' });
             }
-            const { startDate, endDate, duration, leaveType, reasonType, justification, url, directToDepartmentHead, sendToDepartmentHead } = req.body;
+            const { startDate, endDate, duration, leaveType, reasonType, justification, url, targetEmployeeId } = req.body;
             const justificationUrl = req.file ? `/uploads/justifications/${req.file.filename}` : url;
 
             if (!employeeId || !startDate || !endDate || !leaveType) {
@@ -18,6 +18,7 @@ const requestController = {
 
             const requestId = await requestService.createRequest({
                 employeeId,
+                targetEmployeeId,
                 startDate,
                 endDate,
                 duration,
@@ -25,8 +26,6 @@ const requestController = {
                 reasonType,
                 justification,
                 url: justificationUrl,
-                directToDepartmentHead: directToDepartmentHead === true || directToDepartmentHead === 'true',
-                sendToDepartmentHead: sendToDepartmentHead === true || sendToDepartmentHead === 'true',
             });
 
             res.status(201).json({ message: 'Demande de congé créée avec succès.', requestId });
@@ -98,6 +97,15 @@ const requestController = {
             res.status(200).json(request);
         } catch (error) {
             res.status(403).json({ error: error.message });
+        }
+    },
+    async createTitle(req, res) {
+        try {
+            const { requestId } = req.params;
+            const title = await requestService.createTitle({ requestId });
+            res.status(200).json(title);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
         }
     },
     async openJustificationDocument(req, res) {

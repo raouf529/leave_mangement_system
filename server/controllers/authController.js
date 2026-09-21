@@ -76,6 +76,7 @@ const authController = {
                 role: mapRole(user.role),
                 roleLabel: getRoleLabel(user.role),
                 unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null,
+                canCreateForEmployee: Boolean(user.can_create_for_employee),
             });
         } catch (error) {
             res.status(400).json({ error: error.message });

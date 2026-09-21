@@ -1,6 +1,8 @@
 const pool = require('../db');
 const { getExerciseYearForDate, calculateLeaveDuration } = require('../utils/helpers');
 
+const CREATOR_ROLES = ['chef_service', 'chef_departement', 'directeur'];
+
 
 function computeAnnualExerciseSplit(duration, exercises, currentExerciseYear) {
     // split leave request on exercises starting from the oldest
@@ -29,7 +31,8 @@ function computeAnnualExerciseSplit(duration, exercises, currentExerciseYear) {
         allocations.push({
             exercise_id: exercise.exercise_id,
             year: Number(exercise.year),
-            days_allocated: durationToUse
+            days_allocated: durationToUse,
+            remaining_after: Number(exercise.balance || 0) - durationToUse
         });
         remainingDuration -= durationToUse;
     }
@@ -56,7 +59,8 @@ function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
     return [{
         exercise_id: currentExercise.exercise_id,
         year: Number(currentExercise.year),
-        days_allocated: requestedDuration
+        days_allocated: requestedDuration,
+        remaining_after: Number(currentExercise.balance || 0) - requestedDuration
     }];
 }
 
@@ -174,8 +178,8 @@ async function createAnnualExerciseRequest(requestId, conn = pool) {
 
     for (const allocation of allocations) {
         await conn.query(
-            'INSERT INTO Request_exercise_allocation (request_id, exercise_id, days_allocated) VALUES (?, ?, ?)',
-            [requestId, allocation.exercise_id, allocation.days_allocated]
+            'INSERT INTO Request_exercise_allocation (request_id, exercise_id, days_allocated, remaining_after) VALUES (?, ?, ?, ?)',
+            [requestId, allocation.exercise_id, allocation.days_allocated, allocation.remaining_after]
         );
     }
 
@@ -282,31 +286,55 @@ async function getHeadingUnit(unitId, conn = pool) {
     return rows[0];
 }
 
-function resolveDepartmentHeadTarget(employee, employeeUnit, headByUnit, directToDepartmentHead = false) {
-    if (!directToDepartmentHead || !employee || !employeeUnit || !headByUnit) {
-        return null;
+async function isSuperiorOf(superiorId, subordinateId, conn = pool) {
+    if (Number(superiorId) === Number(subordinateId)) {
+        return false;
     }
 
-    if (employeeUnit.type === 'department' || employeeUnit.type === 'direction') {
-        return headByUnit[employeeUnit.unit_id] ?? null;
+    const [rows] = await conn.query(
+        `SELECT superior.id AS superior_id, superior.role AS superior_role,
+                subordinate.id AS subordinate_id, subordinate.role AS subordinate_role,
+                superior.departement_id AS superior_departement_id,
+                COALESCE(superior.direction_id, superior_dep.direction_id, superior_service.direction_id) AS superior_direction_id,
+                subordinate.service_id AS subordinate_service_id,
+                COALESCE(subordinate.departement_id, subordinate_service.departement_id) AS subordinate_departement_id,
+                COALESCE(subordinate.direction_id, subordinate_dep.direction_id, subordinate_service.direction_id) AS subordinate_direction_id
+         FROM Employe superior
+         LEFT JOIN Service superior_service ON superior_service.id = superior.service_id
+         LEFT JOIN Departement superior_dep ON superior_dep.id = COALESCE(superior.departement_id, superior_service.departement_id)
+         LEFT JOIN Employe subordinate ON subordinate.id = ?
+         LEFT JOIN Service subordinate_service ON subordinate_service.id = subordinate.service_id
+         LEFT JOIN Departement subordinate_dep ON subordinate_dep.id = COALESCE(subordinate.departement_id, subordinate_service.departement_id)
+         WHERE superior.id = ?`,
+        [subordinateId, superiorId]
+    );
+    if (rows.length === 0) {
+        return false;
     }
 
-    if (employeeUnit.parent_unit_id) {
-        return headByUnit[employeeUnit.parent_unit_id] ?? null;
+    const relationship = rows[0];
+    if (relationship.superior_role === 'chef_departement') {
+        return relationship.subordinate_role === 'chef_service'
+            && Number(relationship.superior_departement_id) === Number(relationship.subordinate_departement_id);
     }
 
-    return null;
+    if (relationship.superior_role === 'directeur') {
+        return ['chef_service', 'chef_departement'].includes(relationship.subordinate_role)
+            && Number(relationship.superior_direction_id) === Number(relationship.subordinate_direction_id);
+    }
+
+    return false;
 }
 
-async function getNextStepOrder(requestId) {
-    const [rows] = await pool.query(
+async function getNextStepOrder(requestId, conn = pool) {
+    const [rows] = await conn.query(
         'SELECT COALESCE(MAX(step_order), 0) + 1 AS nextOrder FROM Request_step WHERE request_id = ?',
         [requestId]
     );
     return rows[0].nextOrder;
 }
 
-async function forwardRequestToNextStep(requestId, currentlocation_id, decision, comment, conn = pool, directToDepartmentHead = false) {
+async function forwardRequestToNextStep(requestId, currentlocation_id, decision, comment, conn = pool) {
     // currentlocation_id is the id of the employee who is currently handling the request
     const [row] = await conn.query('SELECT * FROM Employe WHERE id = ?', [currentlocation_id]);
     if (!row[0]) {
@@ -315,34 +343,11 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
 
     const currentEmp = row[0];
     const unitRow = await getEmployeeUnit(currentlocation_id, conn);
-    const nextStepOrder = await getNextStepOrder(requestId);
+    const nextStepOrder = await getNextStepOrder(requestId, conn);
 
     let targetUnit;
 
     if (currentEmp.role === 'employe') {
-        if (directToDepartmentHead) {
-            // Bypass service head (if any) and go straight to department head (or director if employee belongs directly to direction)
-            let deptHead = null;
-            if (unitRow.type === 'department') {
-                deptHead = await getHeadingUnit(unitRow, conn);
-            } else if (unitRow.type === 'service' && unitRow.departement_id !== null) {
-                const departmentUnit = await getDepartement(unitRow.departement_id, conn);
-                deptHead = await getHeadingUnit(departmentUnit, conn);
-            } else if (unitRow.type === 'direction') {
-                deptHead = await getHeadingUnit(unitRow, conn);
-            }
-
-            if (!deptHead) {
-                throw new Error(`Aucun chef de département/directeur trouvé pour ${currentEmp.nom} ${currentEmp.prenom}.`);
-            }
-            targetUnit = deptHead;
-            await conn.query(
-                'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
-                [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
-            );
-            return targetUnit;
-        }
-
         // Standard request submission from regular employee: forward to head of employee's unit (Service, Department, or Direction head)
         targetUnit = await getHeadingUnit(unitRow, conn);
         if (!targetUnit) {
@@ -436,20 +441,31 @@ async function assertRequestAccess(requestId, currentUserId, currentUserRole) {
     return requestRows[0];
 }
 
-async function assertStepAccess(stepId, currentUserId, currentUserRole) {
+async function assertStepAccess(stepId, currentUserId, currentUserRole, conn = pool) {
     if (!stepId || !currentUserId) {
         throw new Error('Authentification requise pour traiter une étape de demande.');
     }
 
-    const [stepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
+    const [stepRows] = await conn.query(
+        `SELECT rs.*, lr.request_status
+         FROM Request_step rs
+         JOIN Leave_request lr ON lr.request_id = rs.request_id
+         WHERE rs.step_id = ?
+         FOR UPDATE`,
+        [stepId]
+    );
     if (stepRows.length === 0) {
         throw new Error('Étape de la demande introuvable.');
+    }
+    if (stepRows[0].decision !== null || stepRows[0].request_status !== 'pending') {
+        throw new Error('Cette étape de demande a déjà été traitée.');
     }
 
     const isAssignedTarget = Number(stepRows[0].target_id) === Number(currentUserId);
     const isManager = ['admin', 'drh', 'head', 'hr'].includes(currentUserRole);
+    const canBypass = await isSuperiorOf(currentUserId, stepRows[0].target_id, conn);
 
-    if (!isAssignedTarget && !isManager) {
+    if (!isAssignedTarget && !isManager && !canBypass) {
         throw new Error(`Vous n'êtes pas autorisé à traiter cette étape de la demande.`);
     }
 
@@ -481,10 +497,13 @@ function getRoleLabel(role) {
 }
 
 const requestService = {
-    async createRequest({ employeeId, startDate, endDate, duration, leaveType, reasonType, justification, url, exercise, directToDepartmentHead = false, sendToDepartmentHead = false }) {
+    async createRequest({ employeeId, targetEmployeeId, startDate, endDate, duration, leaveType, reasonType, justification, url, exercise }) {
+        // create new Request
         const effectiveDuration = calculateLeaveDuration(startDate, endDate);
         const normalizedJustification = typeof justification === 'string' ? justification.trim() : '';
         const normalizedReasonType = typeof reasonType === 'string' ? reasonType.trim() : '';
+        const creatorId = Number(employeeId);
+        const requestedEmployeeId = targetEmployeeId ? Number(targetEmployeeId) : creatorId;
 
         if (leaveType === 'exceptional') {
             if (!normalizedReasonType) {
@@ -503,6 +522,38 @@ const requestService = {
         const connection = await pool.getConnection();
 
         try {
+            const [creatorRows] = await connection.query('SELECT * FROM Employe WHERE id = ?', [creatorId]);
+            if (creatorRows.length === 0) {
+                throw new Error('Employé créateur introuvable.');
+            }
+
+            const creator = creatorRows[0];
+            const isCreatingForEmployee = requestedEmployeeId !== creatorId;
+            if (isCreatingForEmployee) {
+                if (!CREATOR_ROLES.includes(creator.role) || !creator.can_create_for_employee) {
+                    throw new Error('Vous n’êtes pas autorisé à créer une demande pour un autre employé.');
+                }
+
+                const [targetScopeRows] = await connection.query(
+                    `SELECT e.id
+                     FROM Employe e
+                     LEFT JOIN Service s ON s.id = e.service_id
+                     LEFT JOIN Departement dep ON dep.id = COALESCE(e.departement_id, s.departement_id)
+                     WHERE e.id = ?
+                       AND e.role = 'employe'
+                       AND (
+                         (? = 'chef_service' AND e.service_id = ?)
+                         OR (? = 'chef_departement' AND COALESCE(e.departement_id, s.departement_id) = ?)
+                         OR (? = 'directeur' AND COALESCE(e.direction_id, dep.direction_id, s.direction_id) = ?)
+                       )`,
+                    [requestedEmployeeId, creator.role, creator.service_id, creator.role, creator.departement_id, creator.role, creator.direction_id]
+                );
+                if (targetScopeRows.length === 0) {
+                    throw new Error('Cet employé ne relève pas de votre périmètre.');
+                }
+            }
+
+            employeeId = requestedEmployeeId;
             const [employeeRows] = await connection.query('SELECT * FROM Employe WHERE id = ?', [employeeId]);
             if (employeeRows.length === 0) {
                 throw new Error('Employé introuvable.');
@@ -542,8 +593,8 @@ const requestService = {
 
             await connection.beginTransaction();
             const [result] = await connection.query(
-                'INSERT INTO Leave_request (Emp_id, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [employeeId, Number(exerciseYear), leaveType, startDate, effectiveDuration, normalizedReasonType || null, normalizedJustification || null, url ?? null, 'pending', new Date().toISOString().slice(0, 19).replace('T', ' ')]
+                'INSERT INTO Leave_request (Emp_id, created_by, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [employeeId, creatorId, Number(exerciseYear), leaveType, startDate, effectiveDuration, normalizedReasonType || null, normalizedJustification || null, url ?? null, 'pending', new Date().toISOString().slice(0, 19).replace('T', ' ')]
             );
 
             if (leaveType === 'annual') {
@@ -573,19 +624,30 @@ const requestService = {
                 const advanceAllocations = computeAdvanceExerciseSplit(effectiveDuration, currentExerciseRows, exerciseYear);
                 for (const allocation of advanceAllocations) {
                     await connection.query(
-                        'INSERT INTO Request_exercise_allocation (request_id, exercise_id, days_allocated) VALUES (?, ?, ?)',
-                        [result.insertId, allocation.exercise_id, allocation.days_allocated]
+                        'INSERT INTO Request_exercise_allocation (request_id, exercise_id, days_allocated, remaining_after) VALUES (?, ?, ?, ?)',
+                        [result.insertId, allocation.exercise_id, allocation.days_allocated, allocation.remaining_after]
                     );
                 }
             }
 
-            const shouldSendToDepartmentHead = directToDepartmentHead === true || directToDepartmentHead === 'true' || sendToDepartmentHead === true || sendToDepartmentHead === 'true';
-            const targetUnit = await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection, shouldSendToDepartmentHead);
+            let targetUnit;
+            if (isCreatingForEmployee) {
+                const nextStepOrder = await getNextStepOrder(result.insertId, connection);
+                await connection.query(
+                    'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
+                    [result.insertId, nextStepOrder, creatorId, null, null, null]
+                );
+                targetUnit = creator;
+            } else {
+                targetUnit = await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection);
+            }
             if (targetUnit && targetUnit.id) {
                 await createNotification({
                     targetId: targetUnit.id,
                     requestId: result.insertId,
-                    content: `${employeeRows[0].nom} ${employeeRows[0].prenom} vous a soumis une demande de congé du ${startDate} au ${endDate}.`
+                    content: isCreatingForEmployee
+                        ? `Une demande de congé pour ${employeeRows[0].nom} ${employeeRows[0].prenom} vous attend pour approbation.`
+                        : `${employeeRows[0].nom} ${employeeRows[0].prenom} vous a soumis une demande de congé du ${startDate} au ${endDate}.`
                 }, connection);
             }
             await connection.commit();
@@ -613,22 +675,41 @@ const requestService = {
         return steps;
     },
     async getPendingStepsForUser(userId) {
+        const [userRows] = await pool.query('SELECT id, role FROM Employe WHERE id = ?', [userId]);
+        if (userRows.length === 0) {
+            throw new Error('Employé introuvable.');
+        }
+
         const [steps] = await pool.query(
                         `SELECT rs.*, lr.start_date, lr.duration, lr.leave_type, lr.justification, lr.url_justification,
                             lr.reason_type, lr.request_status,
-            e.nom, e.prenom, e.email
+            e.nom, e.prenom, e.email,
+            creator.nom AS creator_last_name, creator.prenom AS creator_first_name,
+            creator.role AS creator_role,
+            target.nom AS target_nom, target.prenom AS target_prenom, target.role AS target_role
        FROM Request_step rs
        JOIN Leave_request lr ON lr.request_id = rs.request_id
         JOIN Employe e ON e.id = lr.Emp_id
-       WHERE rs.target_id = ? AND (rs.decision IS NULL OR rs.decision = '') AND lr.request_status = 'pending'`,
+       LEFT JOIN Employe creator ON creator.id = lr.created_by
+       JOIN Employe target ON target.id = rs.target_id
+       WHERE (rs.decision IS NULL OR rs.decision = '') AND lr.request_status = 'pending'
+         AND (rs.target_id = ? OR target.role IN ('chef_service', 'chef_departement'))`,
             [userId]
         );
 
-        if (steps.length === 0) {
+        const visibleSteps = [];
+        for (const step of steps) {
+            if (Number(step.target_id) === Number(userId)
+                || await isSuperiorOf(userId, step.target_id)) {
+                visibleSteps.push(step);
+            }
+        }
+
+        if (visibleSteps.length === 0) {
             return [];
         }
 
-        const requestIds = [...new Set(steps.map((step) => step.request_id))];
+        const requestIds = [...new Set(visibleSteps.map((step) => step.request_id))];
         const [allocations] = await pool.query(
             `SELECT ra.request_id, ra.exercise_id, ra.days_allocated, e.year AS exercise_year
        FROM Request_exercise_allocation ra
@@ -650,7 +731,7 @@ const requestService = {
             return acc;
         }, {});
 
-        return steps.map((step) => ({
+        return visibleSteps.map((step) => ({
             ...step,
             annualSplit: splitByRequest[step.request_id] ?? []
         }));
@@ -660,84 +741,92 @@ const requestService = {
             throw new Error(`Décision invalide « ${decision} ». Valeurs acceptées : 'approved' ou 'rejected'.`);
         }
 
-        const step = await assertStepAccess(stepId, currentUserId, currentUserRole);
-        const [targetRows] = await pool.query('SELECT * FROM Employe WHERE id = ?', [step.target_id]);
+        const connection = await pool.getConnection();
+        const notifications = [];
 
-        if (decision === 'approved') {
-            if (targetRows[0].role === 'drh') {
-                const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [step.request_id]);
-                if (requestRows.length === 0) {
-                    throw new Error('Demande introuvable.');
-                }
+        try {
+            await connection.beginTransaction();
+            const step = await assertStepAccess(stepId, currentUserId, currentUserRole, connection);
+            const [approverRows] = await connection.query('SELECT * FROM Employe WHERE id = ?', [currentUserId]);
+            if (approverRows.length === 0) {
+                throw new Error('Employé introuvable.');
+            }
 
-                if (requestRows[0].request_status === 'approved') {
-                    return { requestId: step.request_id, message: 'Demande déjà approuvée' };
-                }
+            const approver = approverRows[0];
+            const isAssignedTarget = Number(step.target_id) === Number(currentUserId);
+            const isBypass = !isAssignedTarget
+                && ['chef_departement', 'directeur'].includes(approver.role)
+                && await isSuperiorOf(currentUserId, step.target_id, connection);
 
-                await pool.query(
-                    'UPDATE Request_step SET decision = ?, comment = ?, decided_at = NOW() WHERE step_id = ?',
-                    [decision, comment, stepId]
+            const [requestRows] = await connection.query('SELECT * FROM Leave_request WHERE request_id = ? FOR UPDATE', [step.request_id]);
+            if (requestRows.length === 0) {
+                throw new Error('Demande introuvable.');
+            }
+
+            const request = requestRows[0];
+            const approverName = `${approver.nom} ${approver.prenom}`;
+            const targetDecision = isBypass ? 'skipped' : decision;
+            await connection.query(
+                'UPDATE Request_step SET decision = ?, comment = ?, decided_at = NOW() WHERE step_id = ?',
+                [targetDecision, isBypass ? null : comment, stepId]
+            );
+
+            let nextTarget = null;
+            if (isBypass) {
+                const nextStepOrder = await getNextStepOrder(request.request_id, connection);
+                await connection.query(
+                    'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, NOW())',
+                    [request.request_id, nextStepOrder, currentUserId, decision, comment]
                 );
-                await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['approved', step.request_id]);
-                if (requestRows[0].leave_type === 'annual') {
-                    await applyApprovedAnnualAllocations(step.request_id);
-                } else if (requestRows[0].leave_type === 'advance') {
-                    await applyApprovedAdvanceAllocations(step.request_id);
+            }
+
+            if (decision === 'rejected') {
+                await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['rejected', request.request_id]);
+                notifications.push({
+                    targetId: request.Emp_id,
+                    requestId: request.request_id,
+                    content: `Votre demande de congé du ${request.start_date} a été refusée par ${approverName}.`
+                });
+            } else if (approver.role === 'drh' && !isBypass) {
+                await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['approved', request.request_id]);
+                if (request.leave_type === 'annual') {
+                    await applyApprovedAnnualAllocations(request.request_id, connection);
+                } else if (request.leave_type === 'advance') {
+                    await applyApprovedAdvanceAllocations(request.request_id, connection);
                 }
-                await createNotification({
-                    targetId: requestRows[0].Emp_id,
-                    requestId: step.request_id,
-                    content: `Votre demande de congé du ${requestRows[0].start_date} a été approuvée.`
+                notifications.push({
+                    targetId: request.Emp_id,
+                    requestId: request.request_id,
+                    content: `Votre demande de congé du ${request.start_date} a été approuvée par ${approverName}.`
                 });
-
-                return { requestId: step.request_id, message: 'Demande approuvée et finalisée' };
-            }
-
-            await pool.query('UPDATE Request_step SET decision = ?, comment = ?, decided_at = NOW() WHERE step_id = ?', [decision, comment, stepId]);
-            const [updatedStepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
-            if (updatedStepRows.length === 0) {
-                throw new Error('Étape de la demande introuvable.');
-            }
-
-            const requestId = updatedStepRows[0].request_id;
-            const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
-            const targetUnit = await forwardRequestToNextStep(requestId, updatedStepRows[0].target_id, null, null);
-            if (targetUnit) {
-                await createNotification({
-                    targetId: targetUnit.id,
-                    requestId,
-                    content: `Une demande de congé vous a été transmise pour examen par ${targetRows[0]?.nom ?? ''} ${targetRows[0]?.prenom ?? ''}.`
+            } else {
+                const forwardingId = isBypass ? currentUserId : step.target_id;
+                nextTarget = await forwardRequestToNextStep(request.request_id, forwardingId, null, null, connection);
+                if (nextTarget) {
+                    notifications.push({
+                        targetId: nextTarget.id,
+                        requestId: request.request_id,
+                        content: `Une demande de congé vous a été transmise pour examen par ${approverName}.`
+                    });
+                }
+                notifications.push({
+                    targetId: request.Emp_id,
+                    requestId: request.request_id,
+                    content: `Votre demande de congé a été approuvée par ${approverName} et transmise à l'étape suivante.`
                 });
             }
-            if (requestRows.length > 0) {
-                await createNotification({
-                    targetId: requestRows[0].Emp_id,
-                    requestId,
-                    content: `Votre demande de congé a été approuvée par ${targetRows[0]?.nom ?? ''} ${targetRows[0]?.prenom ?? ''} et transmise à l'étape suivante.`
-                });
+
+            await connection.commit();
+            for (const notification of notifications) {
+                await createNotification(notification);
             }
-            return { requestId, targetUnit };
+            return { requestId: request.request_id, targetUnit: nextTarget };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
         }
-
-        await pool.query('UPDATE Request_step SET decision = ?, comment = ?, decided_at = NOW() WHERE step_id = ?', [decision, comment, stepId]);
-        const [rejectedStepRows] = await pool.query('SELECT * FROM Request_step WHERE step_id = ?', [stepId]);
-        if (rejectedStepRows.length === 0) {
-            throw new Error('Étape de la demande introuvable.');
-        }
-
-        const requestId = rejectedStepRows[0].request_id;
-        const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
-        if (requestRows.length === 0) {
-            throw new Error('Demande introuvable.');
-        }
-
-        await pool.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['rejected', requestId]);
-        await createNotification({
-            targetId: requestRows[0].Emp_id,
-            requestId,
-            content: `Votre demande de congé du ${requestRows[0].start_date} a été refusée par ${targetRows[0]?.nom ?? ''} ${targetRows[0]?.prenom ?? ''}.`
-        });
-        return { requestId };
     },
     async cancelRequest(requestId, currentUserId, currentUserRole) {
         const request = await assertRequestAccess(requestId, currentUserId, currentUserRole);
@@ -819,12 +908,75 @@ const requestService = {
         await assertRequestAccess(requestId, currentUserId, currentUserRole);
         const [requestRows] = await pool.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
         return requestRows[0];
+    },
+
+    async createTitle({ requestId }) {
+        const [requestRows] = await pool.query(
+            'SELECT * FROM Leave_request WHERE request_id = ?',
+            [requestId]
+        );
+        if (requestRows.length === 0) {
+            throw new Error('Demande introuvable.');
+        }
+
+        const request = requestRows[0];
+        if (request.request_status !== 'approved') {
+            throw new Error('La demande doit être approuvée pour générer un titre.');
+        }
+
+        const [employeeRows] = await pool.query(
+            'SELECT nom, prenom, matricule FROM Employe WHERE id = ?',
+            [request.Emp_id]
+        );
+        if (employeeRows.length === 0) {
+            throw new Error('Employé introuvable.');
+        }
+
+        const [allocations] = await pool.query(
+            `SELECT re.exercise_id, re.days_allocated, re.remaining_after,
+                    ex.year AS exercise_year
+             FROM Request_exercise_allocation re
+             JOIN Exercise ex ON ex.exercise_id = re.exercise_id
+             WHERE re.request_id = ?
+             ORDER BY ex.year ASC`,
+            [requestId]
+        );
+        if (allocations.length === 0) {
+            throw new Error('Aucun exercice associé à cette demande.');
+        }
+
+        const startDate = new Date(request.start_date);
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + Number(request.duration) - 1);
+        const formatDate = (date) => date.toISOString().slice(0, 10);
+        const employee = employeeRows[0];
+
+        return {
+            name: `${employee.nom} ${employee.prenom}`,
+            matricule: employee.matricule,
+            leaveType: request.leave_type,
+            period: {
+                start: formatDate(startDate),
+                end: formatDate(endDate)
+            },
+            duration: Number(request.duration),
+            status: request.request_status,
+            exercises: allocations.map((allocation) => ({
+                exerciseId: allocation.exercise_id,
+                year: Number(allocation.exercise_year),
+                daysAllocated: Number(allocation.days_allocated),
+                remainingAfter: allocation.remaining_after === null
+                    ? null
+                    : Number(allocation.remaining_after)
+            }))
+        };
     }
+    
 };
 module.exports = requestService;
 module.exports.calculateLeaveDuration = calculateLeaveDuration;
 module.exports.computeAnnualExerciseSplit = computeAnnualExerciseSplit;
-module.exports.resolveDepartmentHeadTarget = resolveDepartmentHeadTarget;
 module.exports.applyApprovedAnnualAllocations = applyApprovedAnnualAllocations;
 module.exports.applyApprovedAdvanceAllocations = applyApprovedAdvanceAllocations;
 module.exports.refundApprovedAllocations = refundApprovedAllocations;
+module.exports.isSuperiorOf = isSuperiorOf;

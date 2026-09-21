@@ -87,9 +87,13 @@ const adminServices = {
         const whereClause = employeeId === undefined ? '' : 'WHERE lr.Emp_id = ?';
         const queryParams = employeeId === undefined ? [] : [employeeId];
         const [requests] = await pool.query(
-            `SELECT lr.*, e.nom, e.prenom, e.email
+                `SELECT lr.*, e.nom, e.prenom, e.email,
+                    creator.nom AS creator_last_name,
+                    creator.prenom AS creator_first_name,
+                    creator.role AS creator_role
              FROM Leave_request lr
              JOIN Employe e ON e.id = lr.Emp_id
+                 LEFT JOIN Employe creator ON creator.id = lr.created_by
              ${whereClause}
              ORDER BY lr.created_at DESC, lr.request_id DESC`,
             queryParams
@@ -145,6 +149,35 @@ const adminServices = {
                      ON DUPLICATE KEY UPDATE balance = VALUES(balance)`,
                     [employee.id, year, balance]
                 );
+
+                const [currentExerciseRows] = await pool.query(
+                    `SELECT exercise_id FROM Exercise WHERE Emp_id = ? AND year = ?`,
+                    [employee.id, year]
+                );
+                const currentExerciseId = currentExerciseRows[0]?.exercise_id;
+
+                if (currentExerciseId) {
+                    const [advanceRows] = await pool.query(
+                        `SELECT COALESCE(SUM(rea.days_allocated), 0) AS approved_advance_days
+                         FROM Leave_request lr
+                         JOIN Request_exercise_allocation rea ON rea.request_id = lr.request_id
+                         JOIN Exercise allocated_exercise ON allocated_exercise.exercise_id = rea.exercise_id
+                         WHERE lr.Emp_id = ?
+                           AND lr.exercise = ?
+                           AND lr.leave_type = 'advance'
+                           AND lr.request_status = 'approved'
+                           AND allocated_exercise.exercise_id = ?`,
+                        [employee.id, year, currentExerciseId]
+                    );
+                    const approvedAdvanceDays = Number(advanceRows[0]?.approved_advance_days) || 0;
+
+                    if (approvedAdvanceDays > 0) {
+                        await pool.query(
+                            `UPDATE Exercise SET balance = balance - ? WHERE exercise_id = ?`,
+                            [approvedAdvanceDays, currentExerciseId]
+                        );
+                    }
+                }
             }
         } catch (error) {
             throw new Error('Error creating new exercise: ' + error.message);
@@ -345,6 +378,39 @@ const adminServices = {
             return { success: true, message: 'Request step decision updated successfully' };
         } catch (error) {
             throw new Error('Error updating request step decision: ' + error.message);
+        }
+    },
+    async assignCreateForOthers(EmpId, permission){
+        // this function use to give/revoke permission of create for other employee for chefs
+        try {
+            const [employee] = await pool.query(`SELECT * FROM Employe WHERE id = ?`, [EmpId]);
+            if(employee[0].role==='employee' || employee[0].role==='admin' || employee[0].role==='drh'){
+                throw new Error(`Employee '${EmpId}' is not authorized to create requests for others`);
+            }
+            await pool.query(`UPDATE Employe SET create_other_request = ? WHERE id = ?`,
+                [permission, EmpId]
+            )
+            return { success: true, message: 'Employee create other request permission updated successfully' };
+        } catch (error) {
+            throw new Error('Error assigning create other request permission: ' + error.message);
+        }
+    },
+    async createMonthBalance(){
+        // in case problem of server don't allow monthly update of balance, add 2.5 for all employees
+        try {
+            const [employees] = await pool.query(`SELECT * FROM Employe`);
+            for(let employee of employees){
+                // add 2.5 to balance of this year exercise
+                year = getExerciseYearForDate(new Date());
+                const [exercise] = await pool.query(`SELECT * FROM Exercise WHERE Emp_id = ? AND exercise_year = ?`, [employee.id, year]);
+                if(exercise.length === 0){
+                    throw new Error(`Employee '${employee.id}' has no exercise`);
+                }
+                await pool.query(`UPDATE Exercise SET balance = ? WHERE exercise_id = ?`, [exercise[0].balance + 2.5, exercise[0].exercise_id]);
+            }
+            return { success: true, message: 'Month balance created successfully' };
+        } catch (error) {
+            
         }
     }
 };

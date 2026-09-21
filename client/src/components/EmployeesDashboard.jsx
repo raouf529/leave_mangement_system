@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import api from './api';
 import Header from './header';
+import LeaveRequestModal from './LeaveRequestModal';
 import useCurrentUser from '../hooks/useCurrentUser';
 
 function getUnitInformation() {
@@ -37,7 +38,7 @@ const ROLE_LABELS = {
   employee: 'Employé'
 };
 
-const AVATAR_PALETTE = ['#1F5673', '#C98A2C', '#3E8A5F', '#6C5CE7', '#C1544A', '#2D9CDB'];
+const AVATAR_PALETTE = ['#1F5673', '#8A5300', '#13694D', '#5B5F97', '#B03A2E', '#4A6B82'];
 
 function formatDate(dateStr) {
   if (!dateStr) return '—';
@@ -92,7 +93,7 @@ function EmployeesDashboard() {
   const [employees, setEmployees] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState('');
-  const { role: currentRole, loading: currentUserLoading } = useCurrentUser();
+  const { user: currentUser, role: currentRole, loading: currentUserLoading } = useCurrentUser();
 
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -101,6 +102,8 @@ function EmployeesDashboard() {
   const [detail, setDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [requestTargetId, setRequestTargetId] = useState(null);
+  const [requestTargetName, setRequestTargetName] = useState('');
   const detailRequestRef = useRef(0);
 
   // Filters for employee's request history
@@ -227,76 +230,129 @@ function EmployeesDashboard() {
           --canvas: #F5F7FA;
           --border: #E4E8ED;
           --primary: #1F5673;
+          --primary-hover: #184559;
           --primary-soft: #E8F0F4;
-          --accent-amber: #C98A2C;
-          --amber-soft: #FBF1DF;
-          --success: #3E8A5F;
-          --success-soft: #E7F4EC;
-          --danger: #C1544A;
-          --danger-soft: #FBEAE8;
+          --accent-amber: #8A5300;
+          --amber-soft: #FFF3D6;
+          --success: #13694D;
+          --success-soft: #DDF3EA;
+          --danger: #B03A2E;
+          --danger-soft: #FBEBE9;
           --neutral-soft: #EEF1F4;
           min-height: 100vh;
           background: var(--canvas);
           color: var(--ink);
+          font-variant-numeric: tabular-nums;
         }
-        .hero-strip { background: var(--surface); border-bottom: 1px solid var(--border); }
-        .hero-label { color: var(--muted); font-size: 0.85rem; }
-        .stat-block { min-width: 88px; }
-        .stat-number { font-size: 1.6rem; font-weight: 700; color: var(--primary); line-height: 1; }
-        .stat-number.employee { color: var(--ink); }
-        .stat-number.head { color: var(--accent-amber); }
-        .stat-number.hr { color: var(--success); }
-        .stat-label { color: var(--muted); font-size: 0.78rem; margin-top: 2px; }
-        .section-card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); }
-        .section-title { font-size: 1.05rem; font-weight: 600; color: var(--ink); }
-        .muted-note { font-size: 0.82rem; color: var(--muted); }
-        .status-badge { display: inline-flex; align-items: center; gap: 6px; padding: 0.3rem 0.65rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
+        .leave-dashboard :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+        /* Cards */
+        .section-card {
+          background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+          box-shadow: 0 1px 2px rgba(27, 36, 48, 0.05);
+        }
+        .section-pad { padding: 1.25rem; }
+        @media (min-width: 768px) { .section-pad { padding: 1.75rem; } }
+
+        /* Typography */
+        .section-title { font-size: 1.125rem; font-weight: 600; color: var(--ink); }
+        .section-title.list-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
+        .muted-note { font-size: 0.9rem; color: var(--muted); }
+
+        /* Chips and badges */
+        .status-badge {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 0.25rem 0.7rem; border-radius: 999px;
+          font-size: 0.82rem; font-weight: 600; white-space: nowrap;
+        }
         .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-        .role-chip { background: var(--primary-soft); color: var(--primary); padding: 0.2rem 0.6rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; }
-        .exercise-card { border-left: 3px solid #D8DEE5; background: #FAFBFC; border-radius: 10px; padding: 1rem 1.1rem; }
-        .exercise-balance { font-size: 1.5rem; font-weight: 700; color: var(--primary); }
-        .filter-input, .filter-select { border: 1px solid var(--border); border-radius: 10px; }
-        .filter-input:focus, .filter-select:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.15); }
-        .view-btn { border: 1px solid var(--primary); color: var(--primary); background: #fff; border-radius: 10px; }
-        .view-btn:hover { background: var(--primary-soft); }
-        .close-btn { border: none; background: #F2F5F8; color: var(--muted); border-radius: 10px; }
+        .role-chip {
+          display: inline-block; background: var(--primary-soft); color: var(--primary);
+          padding: 0.25rem 0.7rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+        }
         .avatar-chip {
           display: inline-flex; align-items: center; justify-content: center;
           border-radius: 50%; color: #fff; font-weight: 700; flex-shrink: 0;
         }
-        .emp-row-name { display: flex; align-items: center; gap: 10px; }
-        .detail-panel-header {
-          background: var(--primary-soft); border-radius: 14px 14px 0 0;
-          margin: -1px -1px 0 -1px;
-          padding: 1.5rem 1.5rem 1.25rem;
+        .emp-row-name { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+
+        /* Exercise cards */
+        .exercise-card { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 1.25rem; }
+        .exercise-balance { font-size: 1.75rem; font-weight: 700; line-height: 1.1; color: var(--primary); }
+
+        /* Filters and form controls */
+        .filter-input, .filter-select { width: 150px; font-size: 0.875rem; }
+        .filter-input.emp-search { width: 260px; }
+        .filter-select.emp-role { width: 170px; }
+        @media (max-width: 575.98px) {
+          .filter-input, .filter-select,
+          .filter-input.emp-search, .filter-select.emp-role { width: 100%; flex: 1 1 140px; }
         }
-        table.employee-table tbody tr:hover { background: #FAFBFC; }
+        .leave-dashboard .form-control,
+        .leave-dashboard .form-select { border-color: #CDD4DC; border-radius: 10px; color: var(--ink); }
+        .leave-dashboard .form-control:focus,
+        .leave-dashboard .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16); }
+        .leave-dashboard .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
+        .leave-dashboard .form-check-input:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16); }
+
+        /* Buttons (explicit states so Bootstrap defaults don't leak in) */
+        .leave-dashboard .btn { border-radius: 9px; font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
+        .leave-dashboard .btn-brand { background: var(--primary); color: #fff; border: 1px solid var(--primary); }
+        .leave-dashboard .btn-brand:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); color: #fff; }
+        .leave-dashboard .view-btn { border: 1px solid var(--border); color: var(--primary); background: var(--surface); }
+        .leave-dashboard .view-btn:hover { background: var(--primary-soft); border-color: var(--primary-soft); color: var(--primary); }
+        .leave-dashboard .close-btn { border: 1px solid var(--border); color: var(--muted); background: var(--surface); }
+        .leave-dashboard .close-btn:hover { background: var(--canvas); color: var(--ink); border-color: var(--border); }
+
+        /* Tables */
+        .leave-dashboard .table-responsive { border: 1px solid var(--border); border-radius: 12px; }
+        .leave-dashboard .table { --bs-table-bg: transparent; font-size: 0.93rem; margin-bottom: 0; }
+        .leave-dashboard .table thead th {
+          font-size: 0.8rem; font-weight: 600; color: var(--muted);
+          padding: 0.75rem 1rem; background: var(--canvas);
+          border-bottom: 1px solid var(--border); white-space: nowrap;
+        }
+        .leave-dashboard .table td { padding: 0.85rem 1rem; border-color: var(--border); }
+        .leave-dashboard .table tbody tr:last-child > td { border-bottom: none; }
+        .leave-dashboard .table tbody tr:hover > td { background: #FAFBFC; }
+
+        /* Detail panel */
+        .detail-panel-header {
+          background: var(--primary-soft); border-bottom: 1px solid var(--border);
+          padding: 1.25rem 1.5rem;
+        }
+
+        /* Empty, loading, alerts */
+        .empty-state {
+          text-align: center; color: var(--muted); font-size: 0.92rem;
+          padding: 1.75rem 1rem; border: 1px dashed #CDD4DC; border-radius: 12px; background: var(--canvas);
+        }
+        .loading-state { display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 3rem 0; color: var(--muted); font-size: 0.9rem; }
+        .leave-dashboard .alert-danger {
+          background: var(--danger-soft); color: var(--danger);
+          border: 1px solid #EBC5C0; border-radius: 10px;
+        }
       `}</style>
 
       <Header />
 
-      
-        
-
-      <main className="container py-4 py-md-5">
+      <main className="container-fluid px-3 px-md-4 py-4 py-md-5">
         {/* Liste des employés */}
-        <div className="section-card p-4 p-md-5 mb-4">
+        <div className="section-card section-pad mb-4">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
-            <h2 className="section-title mb-0">Employés</h2>
+            <h2 className="section-title list-title mb-0">Employés</h2>
             <div className="d-flex flex-wrap gap-2">
               <input
                 type="text"
-                className="form-control filter-input"
+                className="form-control filter-input emp-search"
                 placeholder="Rechercher par nom ou email"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{ minWidth: '220px' }}
               />
               <select
-                className="form-select filter-select"
+                className="form-select filter-select emp-role"
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
-                style={{ minWidth: '160px' }}
               >
                 <option value="all">Tous les rôles</option>
                 <option value="employee">Employé</option>
@@ -313,14 +369,18 @@ function EmployeesDashboard() {
           )}
 
           {loadingList ? (
-            <div className="text-center muted-note py-5">Chargement...</div>
+            <div className="loading-state" role="status">
+              <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+              Chargement...
+            </div>
           ) : filteredEmployees.length === 0 ? (
-            <p className="muted-note mb-0">Aucun employé ne correspond à cette recherche.</p>
+            <p className="empty-state mb-0">Aucun employé ne correspond à cette recherche.</p>
           ) : (
             <div className="table-responsive">
               <table className="table align-middle employee-table">
                 <thead>
-                  <tr className="muted-note text-uppercase">
+                  <tr>
+                    <th>Matricule</th>
                     <th>Nom</th>
                     <th>Email</th>
                     <th>Rôle</th>
@@ -332,6 +392,7 @@ function EmployeesDashboard() {
                 <tbody>
                   {filteredEmployees.map((emp) => (
                     <tr key={emp.id}>
+                      <td className="fw-medium text-nowrap">{emp.matricule ?? '—'}</td>
                       <td>
                         <div className="emp-row-name">
                           <Avatar id={emp.id} firstName={emp.firstName} lastName={emp.lastName} />
@@ -342,7 +403,18 @@ function EmployeesDashboard() {
                       <td><span className="role-chip">{emp.roleLabel ?? ROLE_LABELS[emp.role] ?? emp.role}</span></td>
                       <td>{emp.unit?.name ?? '—'}</td>
                       <td>{emp.unit?.type ?? '—'}</td>
-                      <td className="text-end">
+                      <td className="text-end text-nowrap">
+                        {currentUser?.canCreateForEmployee && emp.role === 'employee' && (
+                          <button
+                            className="btn btn-sm btn-brand me-2"
+                            onClick={() => {
+                              setRequestTargetId(emp.id);
+                              setRequestTargetName(`${emp.firstName} ${emp.lastName}`);
+                            }}
+                          >
+                            Démarrer une demande
+                          </button>
+                        )}
                         <button className="btn btn-sm view-btn" onClick={() => handleViewDetails(emp.id)}>
                           Voir détails
                         </button>
@@ -373,7 +445,7 @@ function EmployeesDashboard() {
               </button>
             </div>
 
-            <div className="p-4 p-md-5">
+            <div className="section-pad">
               {detailError && (
                 <div className="alert alert-danger py-2 small" role="alert">
                   {detailError}
@@ -381,10 +453,17 @@ function EmployeesDashboard() {
               )}
 
               {detailLoading ? (
-                <div className="text-center muted-note py-5">Chargement...</div>
+                <div className="loading-state" role="status">
+              <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+              Chargement...
+            </div>
               ) : detail ? (
                 <>
                   <div className="row g-3 mb-4">
+                    <div className="col-12 col-sm-6 col-md-4">
+                      <p className="muted-note mb-1">Matricule</p>
+                      <p className="fw-medium mb-0">{detail.matricule ?? '—'}</p>
+                    </div>
                     <div className="col-12 col-sm-6 col-md-4">
                       <p className="muted-note mb-1">Email</p>
                       <p className="fw-medium mb-0">{detail.email}</p>
@@ -405,7 +484,7 @@ function EmployeesDashboard() {
 
                   <h3 className="section-title mb-3">Exercices</h3>
                   {activeExercises.length === 0 ? (
-                    <p className="muted-note">Aucun solde disponible.</p>
+                    <p className="empty-state mb-4">Aucun solde disponible.</p>
                   ) : (
                     <div className="row g-3 mb-4">
                       {activeExercises.map((ex, index) => (
@@ -428,8 +507,8 @@ function EmployeesDashboard() {
                         <input className="form-check-input mt-0" type="checkbox" role="switch" id="empActiveLeaveSwitch" checked={detailFilterActive} onChange={(e) => setDetailFilterActive(e.target.checked)} />
                         <label className="form-check-label small fw-medium" htmlFor="empActiveLeaveSwitch">Congés actifs</label>
                       </div>
-                      <input type="date" className="form-control filter-input" value={detailFilterStartDate} onChange={(e) => setDetailFilterStartDate(e.target.value)} style={{ width: '150px' }} title="Date de début exacte" />
-                      <select className="form-select filter-select" value={detailFilterStatus} onChange={(e) => setDetailFilterStatus(e.target.value)} style={{ width: '150px' }}>
+                      <input type="date" className="form-control filter-input" value={detailFilterStartDate} onChange={(e) => setDetailFilterStartDate(e.target.value)} title="Date de début exacte" />
+                      <select className="form-select filter-select" value={detailFilterStatus} onChange={(e) => setDetailFilterStatus(e.target.value)}>
                         <option value="all">Tous statuts</option>
                         <option value="pending">En attente</option>
                         <option value="approved">Approuvée</option>
@@ -440,12 +519,12 @@ function EmployeesDashboard() {
                     </div>
                   </div>
                   {filteredLeaveRequests.length === 0 ? (
-                    <p className="muted-note mb-0">Aucune demande de congé correspondante.</p>
+                    <p className="empty-state mb-0">Aucune demande de congé correspondante.</p>
                   ) : (
                     <div className="table-responsive">
-                      <table className="table align-middle">
+                      <table className="table align-middle history-table">
                         <thead>
-                          <tr className="muted-note text-uppercase">
+                          <tr>
                             <th>Type</th>
                             <th>Dates</th>
                             <th>Durée</th>
@@ -477,6 +556,18 @@ function EmployeesDashboard() {
           </div>
         )}
       </main>
+
+      {requestTargetId && (
+        <LeaveRequestModal
+          targetEmployeeId={requestTargetId}
+          targetEmployeeName={requestTargetName}
+          onClose={() => {
+            setRequestTargetId(null);
+            setRequestTargetName('');
+          }}
+          onSuccess={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

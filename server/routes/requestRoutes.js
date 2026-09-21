@@ -42,6 +42,7 @@ router.post('/', authenticateToken, uploadJustification, requestController.creat
 router.get('/steps/me', authenticateToken, requestController.getMyPendingSteps);
 router.get('/steps/:targetId', authenticateToken, authorizeRequestTargetAccess, requestController.getRequestSteps);
 router.patch('/step/:stepId', authenticateToken, authorizeRequestStepAccess, requestController.updateRequestStep);
+router.get('/:requestId/title', authenticateToken, authorizeRequestAccess, requestController.createTitle);
 router.get('/:requestId/document', authenticateToken, authorizeRequestAccess, requestController.openJustificationDocument);
 router.get('/:requestId', authenticateToken, authorizeRequestAccess, requestController.getRequestDetails);
 router.patch('/:requestId/cancel', authenticateToken, authorizeRequestAccess, requestController.cancelRequest);

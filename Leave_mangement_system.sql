@@ -30,7 +30,7 @@ CREATE TABLE `Employe` (
   `service_id` integer,
   `matricule` integer,
   `fonction` varchar(100), 
-  `demand_for_an employee` bool, NOT NULL DEFAULT false,
+  `can_create_for_employee` bool NOT NULL DEFAULT false
 );
 
 CREATE TABLE `Exercise` (
@@ -45,6 +45,7 @@ CREATE TABLE `Exercise` (
 CREATE TABLE `Leave_request` (
   `request_id` integer PRIMARY KEY AUTO_INCREMENT,
   `Emp_id` integer NOT NULL,
+  `created_by` integer,
   `exercise` int NOT NULL,
   `leave_type` ENUM ('annual', 'exceptional', 'advance') NOT NULL,
   `start_date` date NOT NULL,
@@ -66,7 +67,7 @@ CREATE TABLE `Request_step` (
   `request_id` int NOT NULL,
   `step_order` int NOT NULL,
   `target_id` int NOT NULL,
-  `decision` ENUM ('approved', 'rejected'),
+  `decision` ENUM ('approved', 'rejected', 'skipped'),
   `comment` varchar(500),
   `decided_at` timestamp NULL,
   PRIMARY KEY (`step_id`),
@@ -80,6 +81,7 @@ CREATE TABLE `Request_exercise_allocation` (
   `request_id` int NOT NULL,
   `exercise_id` int NOT NULL,
   `days_allocated` decimal(4,1) NOT NULL,
+  `remaining_after` DECIMAL(4,1) NULL,
   PRIMARY KEY (`allocation_id`),
   UNIQUE KEY `uniq_request_exercise` (`request_id`, `exercise_id`)
 );
@@ -104,11 +106,10 @@ ALTER TABLE `Employe` ADD FOREIGN KEY (`direction_id`) REFERENCES `Direction` (`
 ALTER TABLE `Employe` ADD FOREIGN KEY (`departement_id`) REFERENCES `Departement` (`id`);
 ALTER TABLE `Employe` ADD FOREIGN KEY (`service_id`) REFERENCES `Service` (`id`);
 
-ALTER TABLE `Attendance_count` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
-
 ALTER TABLE `Exercise` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
 
 ALTER TABLE `Leave_request` ADD FOREIGN KEY (`Emp_id`) REFERENCES `Employe` (`id`);
+ALTER TABLE `Leave_request` ADD FOREIGN KEY (`created_by`) REFERENCES `Employe` (`id`);
 ALTER TABLE `Leave_request` ADD FOREIGN KEY (`Emp_id`, `exercise`) REFERENCES `Exercise` (`Emp_id`, `year`);
 
 ALTER TABLE `Request_step` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);

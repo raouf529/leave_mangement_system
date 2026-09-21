@@ -1,7 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import useCurrentUser from '../hooks/useCurrentUser';
 import api from './api';
+import logo from '../assets/Nouveau logo catering .jpeg';
+
+const LOGO_SRC = logo;
 
 function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
   const [openMenu, setOpenMenu] = useState(false);
@@ -9,16 +12,12 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
   const [notifications, setNotifications] = useState([]);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const linkProps = (path) => ({
+    className: `menu-link${pathname === path ? ' active' : ''}`,
+    'aria-current': pathname === path ? 'page' : undefined
+  });
   const { fullName, role, roleLabel } = useCurrentUser();
-
-  const fetchNotifications = async () => {
-    try {
-      const response = await api.get('/notification');
-      setNotifications(response.data || []);
-    } catch (err) {
-      // silent fail on polling errors
-    }
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -29,7 +28,7 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
         if (isMounted) {
           setNotifications(response.data || []);
         }
-      } catch (err) {
+      } catch {
         // silent fail on polling errors
       }
     };
@@ -53,8 +52,8 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
           n.notification_id === notificationId ? { ...n, is_read: true } : n
         )
       );
-    } catch (err) {
-      console.error('Failed to mark notification as read:', err);
+    } catch {
+      console.error('Failed to mark notification as read');
     }
   };
 
@@ -87,54 +86,109 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
           --border: #E4E8ED;
           --primary: #1F5673;
           --primary-soft: #E8F0F4;
+          --danger: #B03A2E;
+          --danger-soft: #FBEBE9;
           background: var(--surface);
           border-bottom: 1px solid var(--border);
+          box-shadow: 0 1px 2px rgba(27, 36, 48, 0.04);
         }
-        .app-header .brand-title { color: var(--ink); }
+        .app-header .logo-tile {
+          width: 180px; height: 48px; flex: none; overflow: hidden;
+          display: flex; align-items: center; justify-content: center;
+          background: var(--surface);
+        }
+        .app-header .logo-tile img { width: 100%; height: 100%; object-fit: contain; }
+        .app-header .logo-tile.logo-fallback {
+          background: var(--primary); color: #fff; border-radius: 10px;
+          font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em;
+        }
+
+        /* Icon buttons */
         .app-header .icon-btn {
-          width: 40px; height: 40px; border: none; background: var(--primary-soft); color: var(--primary);
+          width: 40px; height: 40px; border: none; background: transparent; color: var(--muted);
           display: flex; align-items: center; justify-content: center; border-radius: 10px;
-          position: relative;
+          position: relative; transition: background 150ms ease, color 150ms ease;
         }
+        .app-header .icon-btn:hover:not(:disabled),
+        .app-header .icon-btn[aria-expanded="true"] { background: var(--primary-soft); color: var(--primary); }
+        .app-header .icon-btn:focus-visible,
+        .app-header .logout-btn:focus-visible,
+        .app-header .menu-link:focus-visible,
+        .app-header .mark-read-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .app-header .icon-btn:disabled { opacity: 0.5; }
         .app-header .badge-counter {
           position: absolute; top: -4px; right: -4px;
-          background: #DC3545; color: white; border-radius: 10px;
+          background: var(--danger); color: #fff; border-radius: 10px;
           padding: 2px 6px; font-size: 0.7rem; font-weight: 700; min-width: 18px; text-align: center;
-          line-height: 1; border: 2px solid white;
+          line-height: 1; border: 2px solid var(--surface);
         }
-        .app-header .menu-panel, .app-header .notif-panel {
-          background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-        }
-        .app-header .menu-link { display: block; padding: 0.55rem 1rem; color: var(--ink); text-decoration: none; font-size: 0.92rem; }
-        .app-header .menu-link:hover { background: var(--primary-soft); }
+
+        /* Dropdown panels */
+        .app-header .menu-panel,
         .app-header .notif-panel {
-          width: 320px; max-height: 400px; overflow-y: auto; right: 0; top: 56px; z-index: 1000;
+          background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+          box-shadow: 0 12px 32px rgba(27, 36, 48, 0.12);
         }
-        .app-header .notif-item {
-          padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+        .app-header .menu-panel { padding: 0.375rem; }
+        .app-header .menu-link {
+          display: block; padding: 0.55rem 0.75rem; border-radius: 8px;
+          color: var(--ink); text-decoration: none; font-size: 0.92rem;
           transition: background 150ms ease;
         }
-        .app-header .notif-item.unread { background: #F0F7FF; font-weight: 500; }
+        .app-header .menu-link:hover { background: var(--primary-soft); }
+        .app-header .menu-link.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+
+        /* Notifications */
+        .app-header .notif-panel {
+          width: 340px; max-width: calc(100vw - 24px); max-height: 400px; overflow-y: auto;
+          right: 0; top: calc(100% + 20px); z-index: 1000;
+        }
+        .app-header .notif-head {
+          position: sticky; top: 0; z-index: 1;
+          padding: 0.75rem 1rem; background: var(--surface); border-bottom: 1px solid var(--border);
+        }
+        .app-header .unread-pill {
+          background: var(--danger-soft); color: var(--danger);
+          border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.75rem; font-weight: 600;
+        }
+        .app-header .notif-item {
+          padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+          font-size: 0.85rem; line-height: 1.4;
+          transition: background 150ms ease;
+        }
+        .app-header .notif-item.unread { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); font-weight: 500; }
         .app-header .notif-item:last-child { border-bottom: none; }
+        .app-header .notif-date { font-size: 0.75rem; color: var(--muted); }
+        .app-header .notif-empty { padding: 1.5rem 1rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
+        .app-header .mark-read-btn {
+          flex: none; margin-top: 0.15rem; padding: 0.15rem 0.6rem;
+          border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
+          color: var(--primary); font-size: 0.75rem; font-weight: 600;
+          transition: background 150ms ease;
+        }
+        .app-header .mark-read-btn:hover { background: var(--primary-soft); }
+
+        /* User block + logout */
         .app-header .user-name { color: var(--ink); font-weight: 600; }
         .app-header .user-role { color: var(--muted); font-size: 0.82rem; }
         .app-header .logout-btn {
-          display: inline-flex; align-items: center; gap: 0.45rem; min-height: 40px;
-          padding: 0.5rem 0.8rem; border: 1px solid #E4B7B7; border-radius: 10px;
-          background: #FFF7F7; color: #A33A3A; font-size: 0.88rem; font-weight: 600;
+          display: inline-flex; align-items: center; gap: 0.35rem; min-height: 36px;
+          padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: 9px;
+          background: var(--surface); color: var(--ink); font-size: 0.82rem; font-weight: 600;
           transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
         }
-        .app-header .logout-btn:hover:not(:disabled) { background: #FCEAEA; border-color: #D99696; color: #872D2D; }
+        .app-header .logout-btn:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--primary-soft); color: var(--primary); }
         .app-header .logout-btn:disabled { cursor: wait; opacity: 0.65; }
         .app-header .logout-btn svg { flex: 0 0 auto; }
+
         @media (max-width: 575.98px) {
+          .app-header .logo-tile { width: 132px; height: 38px; }
           .app-header .logout-label { display: none; }
           .app-header .logout-btn { width: 40px; justify-content: center; padding: 0; }
         }
       `}</style>
-      <div className="container d-flex align-items-center justify-content-between py-3 position-relative">
-        <div className="d-flex align-items-center gap-3">
+      <div className="container-fluid px-3 px-md-4 d-flex align-items-center justify-content-between py-2 position-relative" style={{ minHeight: '72px' }}>
+        <div className="d-flex align-items-center gap-2">
           <button
             type="button"
             className="icon-btn"
@@ -143,6 +197,7 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
               setOpenNotifications(false);
             }}
             aria-label="Menu"
+            aria-expanded={openMenu}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <line x1="3" y1="6" x2="21" y2="6" />
@@ -151,36 +206,38 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
             </svg>
           </button>
 
-          <h1 className="h5 fw-bold mb-0 brand-title">Gestion des congés</h1>
+          <div className={`logo-tile ${LOGO_SRC ? '' : 'logo-fallback'}`}>
+            {LOGO_SRC ? <img src={LOGO_SRC} alt="Logo" /> : 'GC'}
+          </div>
 
           {openMenu && (
             <nav
-              className="position-absolute menu-panel shadow-sm py-2"
-              style={{ top: '56px', left: '0', minWidth: '200px', zIndex: 1000 }}
+              className="position-absolute menu-panel"
+              style={{ top: '100%', left: '0', marginTop: '4px', minWidth: '200px', zIndex: 1000 }}
             >
               <ul className="list-unstyled mb-0">
                 <li>
-                  <Link className="menu-link" to="/dashboard" onClick={() => setOpenMenu(false)}>
+                  <Link {...linkProps('/dashboard')} to="/dashboard" onClick={() => setOpenMenu(false)}>
                     Tableau de bord
                   </Link>
                 </li>
                 {canSeeSupervisorLinks && (
                   <li>
-                    <Link className="menu-link" to="/unit-info" onClick={() => setOpenMenu(false)}>
+                    <Link {...linkProps('/unit-info')} to="/unit-info" onClick={() => setOpenMenu(false)}>
                       Mon équipe
                     </Link>
                   </li>
                 )}
                 {canSeeSupervisorLinks && (
                   <li>
-                    <Link className="menu-link" to="/approval-inbox" onClick={() => setOpenMenu(false)}>
+                    <Link {...linkProps('/approval-inbox')} to="/approval-inbox" onClick={() => setOpenMenu(false)}>
                       Boîte de réception
                     </Link>
                   </li>
                 )}
                 {currentRole === 'admin' && (
                   <li>
-                    <Link className="menu-link" to="/admin" onClick={() => setOpenMenu(false)}>
+                    <Link {...linkProps('/admin')} to="/admin" onClick={() => setOpenMenu(false)}>
                       Administration
                     </Link>
                   </li>
@@ -190,12 +247,13 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
           )}
         </div>
 
-        <div className="d-flex align-items-center gap-3 position-relative">
+        <div className="d-flex align-items-center gap-2 position-relative">
           {/* Notification button with 60s polling */}
           <button
             type="button"
             className="icon-btn"
             aria-label="Notifications"
+            aria-expanded={openNotifications}
             onClick={() => {
               setOpenNotifications(!openNotifications);
               setOpenMenu(false);
@@ -211,16 +269,16 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
           </button>
 
           {openNotifications && (
-            <div className="position-absolute notif-panel shadow-sm p-0">
-              <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+            <div className="position-absolute notif-panel p-0">
+              <div className="d-flex justify-content-between align-items-center notif-head">
                 <h6 className="mb-0 fw-bold">Notifications</h6>
                 {unreadCount > 0 && (
-                  <span className="badge bg-danger rounded-pill">{unreadCount} non lue(s)</span>
+                  <span className="unread-pill">{unreadCount} non lue(s)</span>
                 )}
               </div>
               <div className="notif-list">
                 {notifications.length === 0 ? (
-                  <div className="p-3 text-center text-muted small">Aucune notification</div>
+                  <div className="notif-empty">Aucune notification</div>
                 ) : (
                   notifications.map((notif) => (
                     <div
@@ -230,15 +288,14 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
                       <div className="d-flex justify-content-between align-items-start gap-2">
                         <div>
                           <p className="mb-1 text-dark">{notif.content}</p>
-                          <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                          <small className="notif-date">
                             {new Date(notif.created_at).toLocaleString()}
                           </small>
                         </div>
                         {!notif.is_read && (
                           <button
                             type="button"
-                            className="btn btn-sm btn-outline-primary py-0 px-2 mt-1"
-                            style={{ fontSize: '0.75rem' }}
+                            className="mark-read-btn"
                             onClick={(e) => handleMarkAsRead(notif.notification_id, e)}
                           >
                             Lu
