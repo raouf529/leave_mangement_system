@@ -5,6 +5,7 @@ const router = express.Router();
 
 router.post('/create-exercise', authenticateToken, authorizeRoles('hr', 'admin'), adminController.createExercise);
 router.post('/create-exercise-by-id', authenticateToken, authorizeRoles('hr', 'admin'), adminController.createExerciseById);
+router.get('/leave-titles', authenticateToken, authorizeRoles('hr', 'admin'), adminController.getApprovedLeaveTitles);
 router.get('/leave-requests/employee/:employeeId', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.getLeaveRequests);
 router.get('/leave-requests', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.getLeaveRequests);
 router.post('/update-exercise-balance', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.updateExerciseBalance);

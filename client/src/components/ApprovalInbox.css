@@ -1,0 +1,266 @@
+.leave-dashboard {
+  --ink: #050505;
+  --muted: #55708f;
+  --surface: #ffffff;
+  --canvas: #f8fafc;
+  --border: #dce5ef;
+  --primary: #0867d8;
+  --accent-amber: #af5b00;
+  --amber-soft: #fff2c7;
+  --success: #008b68;
+  --success-soft: #c8f7e5;
+  --danger: #c1544a;
+  --danger-soft: #fbeae8;
+  --neutral-soft: #eef1f4;
+  min-height: 100vh;
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.section-card {
+  background: var(--surface);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 4px rgba(27, 36, 48, 0.12);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.muted-note {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.primary-button {
+  background: var(--primary);
+  color: #fff;
+}
+
+.primary-button:hover {
+  background: #0755b5;
+  color: #fff;
+}
+
+.inbox-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.inbox-table {
+  font-size: 0.95rem;
+}
+
+.inbox-table thead th {
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 1rem 1.1rem;
+  background: #f5f8fb;
+  white-space: nowrap;
+}
+
+.inbox-table td {
+  padding: 1rem 1.1rem;
+}
+
+.mini-badge {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.decision-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.decision-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.decision-header {
+  padding: 1.4rem 1.6rem 1rem;
+  flex: none;
+}
+
+.decision-body {
+  padding: 0 1.6rem 1rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.decision-footer {
+  padding: 0.5rem 1.6rem 1.4rem;
+  flex: none;
+}
+
+.close-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 10px;
+  flex: none;
+}
+
+.close-btn:hover {
+  background: var(--neutral-soft);
+}
+
+.decision-info {
+  background: #f5f8fb;
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 0.85rem;
+}
+
+.decision-row {
+  margin: 0 0 0.25rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.decision-row:last-child {
+  margin-bottom: 0;
+}
+
+.decision-label {
+  color: var(--muted);
+}
+
+.step-box {
+  border-radius: 12px;
+  padding: 0.85rem 1.15rem;
+  margin-bottom: 1.1rem;
+}
+
+.split-badge {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.decision-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 1.25rem;
+}
+
+.choice-btn {
+  min-height: 52px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.choice-btn.approve.selected {
+  background: var(--success-soft);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.choice-btn.reject.selected {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.required-mark {
+  color: #b3261e;
+}
+
+.has-error {
+  border-color: #b3261e;
+}
+
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  color: #b3261e;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.field-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.cancel-btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+}
+
+.confirm-btn {
+  color: #fff;
+  border: none;
+}
+
+.confirm-btn:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 575.98px) {
+  .decision-backdrop {
+    padding: 12px;
+  }
+
+  .decision-header {
+    padding: 1.1rem 1.1rem 0.8rem;
+  }
+
+  .decision-body {
+    padding: 0 1.1rem 0.8rem;
+  }
+
+  .decision-footer {
+    padding: 0.5rem 1.1rem 1.1rem;
+  }
+}

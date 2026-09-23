@@ -83,6 +83,35 @@ async function findStepTarget(employeeId, role) {
 
 
 const adminServices = {
+    async getApprovedLeaveTitles(search = '') {
+        const term = String(search ?? '').trim();
+        const params = ['approved'];
+        let searchClause = '';
+
+        if (term) {
+            searchClause = `AND (
+                CAST(e.matricule AS CHAR) LIKE ?
+                OR CONCAT(e.nom, ' ', e.prenom) LIKE ?
+                OR CONCAT(e.prenom, ' ', e.nom) LIKE ?
+            )`;
+            const pattern = `%${term}%`;
+            params.push(pattern, pattern, pattern);
+        }
+
+        const [requests] = await pool.query(
+            `SELECT lr.request_id, lr.leave_type, lr.start_date, lr.duration,
+                    lr.request_status, lr.created_at,
+                    e.id AS employee_id, e.nom, e.prenom, e.matricule
+             FROM Leave_request lr
+             JOIN Employe e ON e.id = lr.Emp_id
+             WHERE lr.request_status = ? ${searchClause}
+             ORDER BY lr.start_date DESC, lr.request_id DESC`,
+            params
+        );
+
+        return requests;
+    },
+
     async getLeaveRequests(employeeId) {
         const whereClause = employeeId === undefined ? '' : 'WHERE lr.Emp_id = ?';
         const queryParams = employeeId === undefined ? [] : [employeeId];

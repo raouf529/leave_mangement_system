@@ -30,7 +30,9 @@ CREATE TABLE `Employe` (
   `service_id` integer,
   `matricule` integer,
   `fonction` varchar(100), 
-  `can_create_for_employee` bool NOT NULL DEFAULT false
+  `can_create_for_employee` bool NOT NULL DEFAULT false,
+  `role_for_leave_request_validation` ENUM ('directeur', 'chef_departement', 'chef_service', 'admin', 'employe') NOT NULL,
+  `is_leave_responsible` bool NOT NULL DEFAULT false
 );
 
 CREATE TABLE `Exercise` (
@@ -96,6 +98,13 @@ CREATE TABLE `Notification` (
   PRIMARY KEY (`notification_id`),
   KEY `idx_notification_target` (`target_id`)
 );
+create TABLE `Logs` (
+  `log_id` INT AUTO_INCREMENT PRIMARY KEY,
+  `emp_id` INT,
+  `action_type` VARCHAR(50) NOT NULL,
+  `action_timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY Key (`log_id`)
+);
 
 
 ALTER TABLE `Departement` ADD FOREIGN KEY (`direction_id`) REFERENCES `Direction` (`id`);
@@ -120,3 +129,5 @@ ALTER TABLE `Request_exercise_allocation` ADD FOREIGN KEY (`exercise_id`) REFERE
 
 ALTER TABLE `Notification` ADD FOREIGN KEY (`target_id`) REFERENCES `Employe` (`id`);
 ALTER TABLE `Notification` ADD FOREIGN KEY (`request_id`) REFERENCES `Leave_request` (`request_id`);
+
+ALTER TABLE `Logs` ADD FOREIGN KEY (`emp_id`) REFERENCES `Employe` (`id`);

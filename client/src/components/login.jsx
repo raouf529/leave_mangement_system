@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
+import './login.css';
 
 function Login() {
   // Guards against reaching /login via the browser back button while a
@@ -65,21 +66,6 @@ function Login() {
 
   return (
     <div className="login-page d-flex align-items-center justify-content-center min-vh-100">
-      <style>{`
-        .login-page {
-          --ink: #1B2430;
-          --muted: #65707D;
-          --canvas: #F5F7FA;
-          --primary: #1F5673;
-          background: var(--canvas);
-        }
-        .login-page .accent-bar { height: 6px; background: var(--primary); }
-        .login-page .login-title { color: var(--ink); }
-        .login-page .login-subtitle { color: var(--muted); }
-        .login-page .btn-primary-solid { background: var(--primary); color: #fff; border: none; }
-        .login-page .btn-primary-solid:disabled { opacity: 0.6; }
-      `}</style>
-
       <div className="bg-white shadow rounded-4 overflow-hidden" style={{ width: '100%', maxWidth: '420px' }}>
         <div className="accent-bar" />
 

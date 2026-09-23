@@ -108,6 +108,19 @@ const requestController = {
             res.status(400).json({ error: error.message });
         }
     },
+    async downloadTitleDocument(req, res) {
+        try {
+            const document = await requestService.createTitleDocument({
+                requestId: req.params.requestId,
+                exerciseId: req.query.exerciseId
+            });
+            res.setHeader('Content-Type', document.contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+            res.send(document.buffer);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
     async openJustificationDocument(req, res) {
         try {
             const { requestId } = req.params;

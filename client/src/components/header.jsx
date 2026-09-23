@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import useCurrentUser from '../hooks/useCurrentUser';
 import api from './api';
 import logo from '../assets/Nouveau logo catering .jpeg';
+import './header.css';
 
 const LOGO_SRC = logo;
 
@@ -78,115 +79,6 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
 
   return (
     <header className="app-header">
-      <style>{`
-        .app-header {
-          --ink: #1B2430;
-          --muted: #65707D;
-          --surface: #FFFFFF;
-          --border: #E4E8ED;
-          --primary: #1F5673;
-          --primary-soft: #E8F0F4;
-          --danger: #B03A2E;
-          --danger-soft: #FBEBE9;
-          background: var(--surface);
-          border-bottom: 1px solid var(--border);
-          box-shadow: 0 1px 2px rgba(27, 36, 48, 0.04);
-        }
-        .app-header .logo-tile {
-          width: 180px; height: 48px; flex: none; overflow: hidden;
-          display: flex; align-items: center; justify-content: center;
-          background: var(--surface);
-        }
-        .app-header .logo-tile img { width: 100%; height: 100%; object-fit: contain; }
-        .app-header .logo-tile.logo-fallback {
-          background: var(--primary); color: #fff; border-radius: 10px;
-          font-weight: 700; font-size: 0.95rem; letter-spacing: 0.02em;
-        }
-
-        /* Icon buttons */
-        .app-header .icon-btn {
-          width: 40px; height: 40px; border: none; background: transparent; color: var(--muted);
-          display: flex; align-items: center; justify-content: center; border-radius: 10px;
-          position: relative; transition: background 150ms ease, color 150ms ease;
-        }
-        .app-header .icon-btn:hover:not(:disabled),
-        .app-header .icon-btn[aria-expanded="true"] { background: var(--primary-soft); color: var(--primary); }
-        .app-header .icon-btn:focus-visible,
-        .app-header .logout-btn:focus-visible,
-        .app-header .menu-link:focus-visible,
-        .app-header .mark-read-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-        .app-header .icon-btn:disabled { opacity: 0.5; }
-        .app-header .badge-counter {
-          position: absolute; top: -4px; right: -4px;
-          background: var(--danger); color: #fff; border-radius: 10px;
-          padding: 2px 6px; font-size: 0.7rem; font-weight: 700; min-width: 18px; text-align: center;
-          line-height: 1; border: 2px solid var(--surface);
-        }
-
-        /* Dropdown panels */
-        .app-header .menu-panel,
-        .app-header .notif-panel {
-          background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-          box-shadow: 0 12px 32px rgba(27, 36, 48, 0.12);
-        }
-        .app-header .menu-panel { padding: 0.375rem; }
-        .app-header .menu-link {
-          display: block; padding: 0.55rem 0.75rem; border-radius: 8px;
-          color: var(--ink); text-decoration: none; font-size: 0.92rem;
-          transition: background 150ms ease;
-        }
-        .app-header .menu-link:hover { background: var(--primary-soft); }
-        .app-header .menu-link.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-
-        /* Notifications */
-        .app-header .notif-panel {
-          width: 340px; max-width: calc(100vw - 24px); max-height: 400px; overflow-y: auto;
-          right: 0; top: calc(100% + 20px); z-index: 1000;
-        }
-        .app-header .notif-head {
-          position: sticky; top: 0; z-index: 1;
-          padding: 0.75rem 1rem; background: var(--surface); border-bottom: 1px solid var(--border);
-        }
-        .app-header .unread-pill {
-          background: var(--danger-soft); color: var(--danger);
-          border-radius: 999px; padding: 0.15rem 0.6rem; font-size: 0.75rem; font-weight: 600;
-        }
-        .app-header .notif-item {
-          padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
-          font-size: 0.85rem; line-height: 1.4;
-          transition: background 150ms ease;
-        }
-        .app-header .notif-item.unread { background: var(--primary-soft); box-shadow: inset 3px 0 0 var(--primary); font-weight: 500; }
-        .app-header .notif-item:last-child { border-bottom: none; }
-        .app-header .notif-date { font-size: 0.75rem; color: var(--muted); }
-        .app-header .notif-empty { padding: 1.5rem 1rem; text-align: center; color: var(--muted); font-size: 0.875rem; }
-        .app-header .mark-read-btn {
-          flex: none; margin-top: 0.15rem; padding: 0.15rem 0.6rem;
-          border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
-          color: var(--primary); font-size: 0.75rem; font-weight: 600;
-          transition: background 150ms ease;
-        }
-        .app-header .mark-read-btn:hover { background: var(--primary-soft); }
-
-        /* User block + logout */
-        .app-header .user-name { color: var(--ink); font-weight: 600; }
-        .app-header .user-role { color: var(--muted); font-size: 0.82rem; }
-        .app-header .logout-btn {
-          display: inline-flex; align-items: center; gap: 0.35rem; min-height: 36px;
-          padding: 0.35rem 0.65rem; border: 1px solid var(--border); border-radius: 9px;
-          background: var(--surface); color: var(--ink); font-size: 0.82rem; font-weight: 600;
-          transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
-        }
-        .app-header .logout-btn:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--primary-soft); color: var(--primary); }
-        .app-header .logout-btn:disabled { cursor: wait; opacity: 0.65; }
-        .app-header .logout-btn svg { flex: 0 0 auto; }
-
-        @media (max-width: 575.98px) {
-          .app-header .logo-tile { width: 132px; height: 38px; }
-          .app-header .logout-label { display: none; }
-          .app-header .logout-btn { width: 40px; justify-content: center; padding: 0; }
-        }
-      `}</style>
       <div className="container-fluid px-3 px-md-4 d-flex align-items-center justify-content-between py-2 position-relative" style={{ minHeight: '72px' }}>
         <div className="d-flex align-items-center gap-2">
           <button
@@ -239,6 +131,13 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
                   <li>
                     <Link {...linkProps('/admin')} to="/admin" onClick={() => setOpenMenu(false)}>
                       Administration
+                    </Link>
+                  </li>
+                )}
+                {(currentRole === 'hr' || currentRole === 'admin') && (
+                  <li>
+                    <Link className="menu-link" to="/leave-titles" onClick={() => setOpenMenu(false)}>
+                      Titres de congé
                     </Link>
                   </li>
                 )}

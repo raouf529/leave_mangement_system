@@ -1,4 +1,6 @@
 const pool = require('../db');
+const path = require('path');
+const AdmZip = require('adm-zip');
 const { getExerciseYearForDate, calculateLeaveDuration } = require('../utils/helpers');
 
 const CREATOR_ROLES = ['chef_service', 'chef_departement', 'directeur'];
@@ -925,7 +927,7 @@ const requestService = {
         }
 
         const [employeeRows] = await pool.query(
-            'SELECT nom, prenom, matricule FROM Employe WHERE id = ?',
+            'SELECT nom, prenom, matricule, fonction FROM Employe WHERE id = ?',
             [request.Emp_id]
         );
         if (employeeRows.length === 0) {
@@ -945,32 +947,171 @@ const requestService = {
             throw new Error('Aucun exercice associé à cette demande.');
         }
 
-        const startDate = new Date(request.start_date);
+        const startDate = request.start_date instanceof Date
+            ? new Date(request.start_date.getTime())
+            : new Date(`${request.start_date}T00:00:00`);
         const endDate = new Date(startDate);
         endDate.setDate(endDate.getDate() + Number(request.duration) - 1);
-        const formatDate = (date) => date.toISOString().slice(0, 10);
+        const formatDate = (date) => {
+            const value = date instanceof Date ? new Date(date.getTime()) : new Date(`${date}T00:00:00`);
+            const year = value.getFullYear();
+            const month = String(value.getMonth() + 1).padStart(2, '0');
+            const day = String(value.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
         const employee = employeeRows[0];
 
+        let currentDate = new Date(startDate);
+        const exerciseRanges = allocations.map((allocation) => {
+            const days = Number(allocation.days_allocated) || 0;
+            const allocationStart = new Date(currentDate);
+            const allocationEnd = new Date(currentDate);
+            allocationEnd.setDate(allocationEnd.getDate() + days - 1);
+
+            const range = {
+                exerciseId: allocation.exercise_id,
+                year: Number(allocation.exercise_year),
+                daysAllocated: Number(allocation.days_allocated),
+                remainingAfter: allocation.remaining_after === null
+                    ? null
+                    : Number(allocation.remaining_after),
+                period: {
+                    start: formatDate(allocationStart),
+                    end: formatDate(allocationEnd)
+                }
+            };
+
+            currentDate = new Date(allocationEnd);
+            currentDate.setDate(currentDate.getDate() + 1);
+            return range;
+        });
+
         return {
+            requestId: Number(requestId),
             name: `${employee.nom} ${employee.prenom}`,
             matricule: employee.matricule,
             leaveType: request.leave_type,
+            qualite: employee.fonction,
             period: {
                 start: formatDate(startDate),
                 end: formatDate(endDate)
             },
             duration: Number(request.duration),
             status: request.request_status,
-            exercises: allocations.map((allocation) => ({
-                exerciseId: allocation.exercise_id,
-                year: Number(allocation.exercise_year),
-                daysAllocated: Number(allocation.days_allocated),
-                remainingAfter: allocation.remaining_after === null
-                    ? null
-                    : Number(allocation.remaining_after)
-            }))
+            exercises: exerciseRanges
         };
-    }
+    },
+
+    async createTitleDocument({ requestId, exerciseId }) {
+        const title = await requestService.createTitle({ requestId });
+        const allocation = title.exercises.find((item) => Number(item.exerciseId) === Number(exerciseId));
+        if (!allocation) {
+            throw new Error('Cet exercice n’est pas associé à la demande.');
+        }
+
+        const templatePath = path.join(__dirname, '..', '..', 'Titre_de_conge (2).docx');
+        const zip = new AdmZip(templatePath);
+        const contentEntry = zip.getEntry('content.xml');
+        if (!contentEntry) {
+            throw new Error('Le modèle de titre est invalide : content.xml est introuvable.');
+        }
+
+        let content = contentEntry.getData().toString('utf8');
+        const escapeXml = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+        const formatDate = (value) => {
+            const date = value instanceof Date ? value : new Date(`${value}T00:00:00`);
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
+        const leaveType = {
+            annual: 'Annuel',
+            exceptional: 'Exceptionnel',
+            advance: 'Par anticipation'
+        }[title.leaveType] ?? title.leaveType;
+
+        const cellWithValue = (value) => `<text:p text:style-name="P3"><text:span text:style-name="T2">${escapeXml(value)}</text:span></text:p>`;
+
+        const replaceNextCellAfterLabel = (label, value) => {
+            const labelIndex = content.indexOf(escapeXml(label));
+            if (labelIndex < 0) return false;
+
+            const rowStart = content.lastIndexOf('<table:table-row', labelIndex);
+            const rowEnd = content.indexOf('</table:table-row>', labelIndex);
+            if (rowStart < 0 || rowEnd < 0) return false;
+
+            const row = content.slice(rowStart, rowEnd);
+            const labelCellEnd = row.indexOf('</table:table-cell>', row.indexOf(escapeXml(label)));
+            const targetStart = row.indexOf('<table:table-cell', labelCellEnd);
+            const targetEnd = row.indexOf('</table:table-cell>', targetStart);
+            if (labelCellEnd < 0) return false;
+            if (targetStart < 0 || targetEnd < 0) {
+                const labelPattern = new RegExp(`(${escapeXml(label)}<\\/text:span>)`);
+                const rowWithValue = row.replace(labelPattern, `$1<text:span text:style-name="T2"> ${escapeXml(value)}</text:span>`);
+                content = `${content.slice(0, rowStart)}${rowWithValue}${content.slice(rowEnd)}`;
+                return rowWithValue !== row;
+            }
+
+            const targetCell = row.slice(targetStart, targetEnd);
+            const contentStart = targetCell.indexOf('>') + 1;
+            const updatedCell = `${targetCell.slice(0, contentStart)}${cellWithValue(value)}`;
+            const updatedRow = `${row.slice(0, targetStart)}${updatedCell}${row.slice(targetEnd)}`;
+            content = `${content.slice(0, rowStart)}${updatedRow}${content.slice(rowEnd)}`;
+            return true;
+        };
+
+        const replacePreviousCellBeforeLabel = (label, value) => {
+            const labelIndex = content.indexOf(escapeXml(label));
+            if (labelIndex < 0) return false;
+
+            const rowStart = content.lastIndexOf('<table:table-row', labelIndex);
+            const rowEnd = content.indexOf('</table:table-row>', labelIndex);
+            const row = content.slice(rowStart, rowEnd);
+            const cells = [...row.matchAll(/<table:table-cell[\s\S]*?<\/table:table-cell>/g)];
+            const labelCellIndex = cells.findIndex((cell) => cell[0].includes(escapeXml(label)));
+            if (labelCellIndex <= 0) return false;
+
+            const previousCell = cells[labelCellIndex - 1][0];
+            const updatedCell = previousCell.replace(/<text:p[\s\S]*?<\/text:p>/, cellWithValue(value));
+            const updatedRow = row.replace(previousCell, updatedCell);
+            content = `${content.slice(0, rowStart)}${updatedRow}${content.slice(rowEnd)}`;
+            return true;
+        };
+
+        const currentYear = String(new Date().getFullYear()).slice(-2);
+        const splitDuration = Number(allocation.daysAllocated ?? title.duration ?? 0);
+        const allocationStart = allocation.period?.start ?? title.period.start;
+        const allocationEnd = allocation.period?.end ?? title.period.end;
+
+        content = content.replace(/\/ 26(?=<\/text:span>)/, `/ ${currentYear}`);
+        content = content.replace(/>Exercice<\/text:span>/, `>Exercice ${allocation.year}<\/text:span>`);
+
+        replaceNextCellAfterLabel('Bénéficiaire :', title.name);
+        replaceNextCellAfterLabel('MATRICULE :', title.matricule ?? '');
+        replaceNextCellAfterLabel('Qualité :', title.qualite ?? '');
+        replaceNextCellAfterLabel('Congé accordé :', leaveType);
+        replaceNextCellAfterLabel('De :', formatDate(allocationStart));
+        replacePreviousCellBeforeLabel('Jours', `${splitDuration}`);
+        replaceNextCellAfterLabel('DU', formatDate(allocationStart));
+        replaceNextCellAfterLabel('Au', formatDate(allocationEnd));
+        replaceNextCellAfterLabel('Reste à Prendre :', `${allocation.remainingAfter ?? ''} JOURS`);
+
+        zip.updateFile('content.xml', Buffer.from(content, 'utf8'));
+        const safeName = String(title.name).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+        return {
+            buffer: zip.toBuffer(),
+            filename: `titre-de-conge-${safeName}-${allocation.year}.odt`,
+            contentType: 'application/vnd.oasis.opendocument.text'
+        };
+    },
+
+    
     
 };
 module.exports = requestService;

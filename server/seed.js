@@ -72,14 +72,18 @@ async function seedEmployees(conn, org) {
     { key: 'e6', first: 'Sarah',   last: 'Ouali',    email: 'sarah.ouali@corp.dz',     role: 'employe', level: 'service', unit: 'Section Dev',  date: '2022-01-17' },
     { key: 'e7', first: 'Bilal',   last: 'Rahmani',  email: 'bilal.rahmani@corp.dz',   role: 'employe', level: 'service', unit: 'Section Infra', date: '2021-08-09' },
     { key: 'e8', first: 'Sami',    last: 'Grine',    email: 'sami.grine@corp.dz',      role: 'employe', level: 'service', unit: 'Section Infra', date: '2023-02-10' },
-    { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',   date: '2026-08-23' },
-  ];
+    { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',   date: '2026-09-10' },
+    { key: 'e10', first: 'Amine', last: 'Ferhat',    email: 'amine.ferhat@corp.dz',    role: 'employe', level: 'departement', unit: 'Département RH', date: '2020-04-12' },
+{ key: 'e11', first: 'Lydia', last: 'Mansouri',  email: 'lydia.mansouri@corp.dz',  role: 'employe', level: 'departement', unit: 'Département IT', date: '2021-07-03' },]
+  ;
 
   for (const [index, p] of roster.entries()) {
     const directionId = p.level === 'direction' ? org.directions[p.unit] : null;
     const departementId = p.level === 'departement' ? org.departements[p.unit] : null;
     const serviceId = p.level === 'service' ? org.services[p.unit] : null;
 
+    // For service-based employees, keep service_id populated.
+    // For department/direction employees, attach directly to the parent unit and leave service_id null.
     const [result] = await conn.query(
       `INSERT INTO Employe (nom, nom_jeune_fille, prenom, email, password, date_entree, role, direction_id, departement_id, service_id, matricule, can_create_for_employee)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -95,11 +99,10 @@ async function seedExercise(conn, emp) {
   const exercises = {};
   for (const key of Object.keys(emp)) {
     if (key === 'e9') {
-      const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2026, assignBalance(16) + 2.5, '2026-08-16']);
-      exercises[key] = { 2026: r2026.insertId };
+      exercises[key] = null;
       continue;
     }
-    const balances = key === 'e8' ? { 2024: 0, 2025: 0, 2026: 7.0 } : { 2024: 5, 2025: 30, 2026: 7.0 };
+    const balances = key === 'e8' ? { 2024: 0, 2025: 0, 2026: 7.0 } :  { 2024: 5, 2025: 30, 2026: 7.0 };
     const [r2024] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2024, balances[2024], '2024-07-01']);
     const [r2025] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2025, balances[2025], '2025-07-01']);
     const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2026, balances[2026], '2026-07-01']);
@@ -132,13 +135,30 @@ async function seedLeaveRequestsAndSteps(conn, emp, exercises) {
     requestIds[r.key] = result.insertId;
 
     if (r.type === 'annual') {
-      const exerciseId = exercises[r.emp][r.exercise];
-      const [exerciseRows] = await conn.query('SELECT balance FROM Exercise WHERE exercise_id = ?', [exerciseId]);
-      const remainingAfter = Number(exerciseRows[0]?.balance ?? 0) - Number(r.duration);
-      await conn.query(
-        'INSERT INTO Request_exercise_allocation (request_id, exercise_id, days_allocated, remaining_after) VALUES (?, ?, ?, ?)',
-        [result.insertId, exerciseId, r.duration, remainingAfter]
+      const [exerciseRows] = await conn.query(
+        `SELECT exercise_id, year, balance
+         FROM Exercise
+         WHERE Emp_id = ? AND year != ? AND balance > 0
+         ORDER BY year ASC`,
+        [emp[r.emp], r.exercise]
       );
+
+      let remainingDuration = Number(r.duration);
+      for (const exercise of exerciseRows) {
+        if (remainingDuration <= 0) break;
+
+        const daysAllocated = Math.min(remainingDuration, Number(exercise.balance));
+        const remainingAfter = Number(exercise.balance) - daysAllocated;
+        await conn.query(
+          'INSERT INTO Request_exercise_allocation (request_id, exercise_id, days_allocated, remaining_after) VALUES (?, ?, ?, ?)',
+          [result.insertId, exercise.exercise_id, daysAllocated, remainingAfter]
+        );
+        remainingDuration -= daysAllocated;
+      }
+
+      if (remainingDuration > 0) {
+        throw new Error(`Seed request ${r.key} has insufficient exercise balance.`);
+      }
     }
   }
 

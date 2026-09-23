@@ -1,0 +1,229 @@
+.leave-modal-overlay {
+  background: rgba(27, 36, 48, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1050;
+  padding: 16px;
+}
+
+.leave-modal {
+  --ink: #1b2430;
+  --muted: #65707d;
+  --surface: #ffffff;
+  --canvas: #f5f7fa;
+  --border: #e4e8ed;
+  --primary: #1f5673;
+  --primary-hover: #184559;
+  --primary-soft: #e8f0f4;
+  --danger: #b03a2e;
+  --danger-soft: #fbebe9;
+  display: flex;
+  flex-direction: column;
+  max-height: 92vh;
+  color: var(--ink);
+  animation: leaveModalIn 0.18s ease-out;
+}
+
+@keyframes leaveModalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leave-modal { animation: none; }
+}
+
+.leave-modal .accent-bar {
+  height: 6px;
+  background: var(--primary);
+  flex: none;
+}
+
+.leave-modal-header {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+  flex: none;
+}
+
+.leave-modal h2 {
+  color: var(--ink);
+  font-size: 1.3rem;
+}
+
+.leave-modal .close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--canvas);
+  color: var(--muted);
+  border-radius: 10px;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.leave-modal .close-btn:hover {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.leave-modal :focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.leave-modal-body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  scrollbar-color: #c5ced8 transparent;
+  scrollbar-width: thin;
+}
+
+.leave-modal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.leave-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.leave-modal-body::-webkit-scrollbar-thumb {
+  background: #c5ced8;
+  border-radius: 8px;
+}
+
+.leave-modal .form-label {
+  font-size: 0.9rem;
+  color: var(--ink);
+  margin-bottom: 0.35rem;
+}
+
+.leave-modal .form-control,
+.leave-modal .form-select {
+  border-color: #cdd4dc;
+  border-radius: 10px;
+  color: var(--ink);
+}
+
+.leave-modal textarea.form-control {
+  resize: vertical;
+}
+
+.leave-modal .form-control:focus,
+.leave-modal .form-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16);
+}
+
+.leave-modal .form-control::file-selector-button,
+.leave-modal .form-control:hover:not(:disabled):not([readonly])::file-selector-button {
+  background-color: var(--primary-soft);
+  color: var(--primary);
+  font-weight: 600;
+  border-color: transparent;
+}
+
+.leave-modal .duration-note {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.leave-modal .required-mark {
+  color: var(--danger);
+}
+
+.leave-modal .field-hint,
+.leave-modal .form-text {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.leave-modal .has-error {
+  border-color: var(--danger);
+}
+
+.leave-modal .has-error:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 0.2rem rgba(176, 58, 46, 0.15);
+}
+
+.leave-modal .field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.leave-modal .field-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.leave-modal .field-error.boxed {
+  background: var(--danger-soft);
+  border-left: 3px solid var(--danger);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.leave-modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  flex: none;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.leave-modal .alert-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border: 1px solid #ebc5c0;
+  border-radius: 10px;
+}
+
+.leave-modal .btn-lg {
+  font-size: 1rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 10px;
+}
+
+.leave-modal .btn-primary-solid {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  transition: background 150ms ease;
+}
+
+.leave-modal .btn-primary-solid:hover:not(:disabled) {
+  background: var(--primary-hover);
+  color: #fff;
+}
+
+.leave-modal .btn-primary-solid:disabled {
+  opacity: 0.6;
+}
+
+.leave-modal .btn-outline-neutral {
+  border: 1px solid var(--border);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.leave-modal .btn-outline-neutral:hover {
+  background: var(--canvas);
+  color: var(--ink);
+}

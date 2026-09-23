@@ -17,7 +17,9 @@ services:
       retries: 15
 
   backend:
-    build: ./server
+    build:
+      context: .
+      dockerfile: server/Dockerfile
     restart: unless-stopped
     ports:
       - "5000:5000"

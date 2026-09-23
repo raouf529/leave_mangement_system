@@ -1,0 +1,32 @@
+.login-page {
+  --ink: #1b2430;
+  --muted: #65707d;
+  --canvas: #f5f7fa;
+  --primary: #1f5673;
+  background: var(--canvas);
+}
+
+.login-page .accent-bar {
+  height: 6px;
+  background: var(--primary);
+}
+
+.login-page .login-title {
+  color: var(--ink);
+}
+
+.login-page .login-subtitle {
+  color: var(--muted);
+}
+
+.login-page .btn-primary-solid {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+}
+
+.login-page .btn-primary-solid:disabled {
+  opacity: 0.6;
+}
+
+.login-page .bg-white { background: #fff; }

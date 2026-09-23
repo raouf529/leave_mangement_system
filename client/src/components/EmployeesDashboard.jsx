@@ -3,6 +3,7 @@ import api from './api';
 import Header from './header';
 import LeaveRequestModal from './LeaveRequestModal';
 import useCurrentUser from '../hooks/useCurrentUser';
+import './EmployeesDashboard.css';
 
 function getUnitInformation() {
   return api.get('/profile/me/underemployees');
@@ -222,118 +223,6 @@ function EmployeesDashboard() {
 
   return (
     <div className="leave-dashboard">
-      <style>{`
-        .leave-dashboard {
-          --ink: #1B2430;
-          --muted: #65707D;
-          --surface: #FFFFFF;
-          --canvas: #F5F7FA;
-          --border: #E4E8ED;
-          --primary: #1F5673;
-          --primary-hover: #184559;
-          --primary-soft: #E8F0F4;
-          --accent-amber: #8A5300;
-          --amber-soft: #FFF3D6;
-          --success: #13694D;
-          --success-soft: #DDF3EA;
-          --danger: #B03A2E;
-          --danger-soft: #FBEBE9;
-          --neutral-soft: #EEF1F4;
-          min-height: 100vh;
-          background: var(--canvas);
-          color: var(--ink);
-          font-variant-numeric: tabular-nums;
-        }
-        .leave-dashboard :focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-
-        /* Cards */
-        .section-card {
-          background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-          box-shadow: 0 1px 2px rgba(27, 36, 48, 0.05);
-        }
-        .section-pad { padding: 1.25rem; }
-        @media (min-width: 768px) { .section-pad { padding: 1.75rem; } }
-
-        /* Typography */
-        .section-title { font-size: 1.125rem; font-weight: 600; color: var(--ink); }
-        .section-title.list-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
-        .muted-note { font-size: 0.9rem; color: var(--muted); }
-
-        /* Chips and badges */
-        .status-badge {
-          display: inline-flex; align-items: center; gap: 6px;
-          padding: 0.25rem 0.7rem; border-radius: 999px;
-          font-size: 0.82rem; font-weight: 600; white-space: nowrap;
-        }
-        .status-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
-        .role-chip {
-          display: inline-block; background: var(--primary-soft); color: var(--primary);
-          padding: 0.25rem 0.7rem; border-radius: 999px; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
-        }
-        .avatar-chip {
-          display: inline-flex; align-items: center; justify-content: center;
-          border-radius: 50%; color: #fff; font-weight: 700; flex-shrink: 0;
-        }
-        .emp-row-name { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
-
-        /* Exercise cards */
-        .exercise-card { border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 1.25rem; }
-        .exercise-balance { font-size: 1.75rem; font-weight: 700; line-height: 1.1; color: var(--primary); }
-
-        /* Filters and form controls */
-        .filter-input, .filter-select { width: 150px; font-size: 0.875rem; }
-        .filter-input.emp-search { width: 260px; }
-        .filter-select.emp-role { width: 170px; }
-        @media (max-width: 575.98px) {
-          .filter-input, .filter-select,
-          .filter-input.emp-search, .filter-select.emp-role { width: 100%; flex: 1 1 140px; }
-        }
-        .leave-dashboard .form-control,
-        .leave-dashboard .form-select { border-color: #CDD4DC; border-radius: 10px; color: var(--ink); }
-        .leave-dashboard .form-control:focus,
-        .leave-dashboard .form-select:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16); }
-        .leave-dashboard .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
-        .leave-dashboard .form-check-input:focus { border-color: var(--primary); box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16); }
-
-        /* Buttons (explicit states so Bootstrap defaults don't leak in) */
-        .leave-dashboard .btn { border-radius: 9px; font-size: 0.85rem; font-weight: 500; white-space: nowrap; }
-        .leave-dashboard .btn-brand { background: var(--primary); color: #fff; border: 1px solid var(--primary); }
-        .leave-dashboard .btn-brand:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); color: #fff; }
-        .leave-dashboard .view-btn { border: 1px solid var(--border); color: var(--primary); background: var(--surface); }
-        .leave-dashboard .view-btn:hover { background: var(--primary-soft); border-color: var(--primary-soft); color: var(--primary); }
-        .leave-dashboard .close-btn { border: 1px solid var(--border); color: var(--muted); background: var(--surface); }
-        .leave-dashboard .close-btn:hover { background: var(--canvas); color: var(--ink); border-color: var(--border); }
-
-        /* Tables */
-        .leave-dashboard .table-responsive { border: 1px solid var(--border); border-radius: 12px; }
-        .leave-dashboard .table { --bs-table-bg: transparent; font-size: 0.93rem; margin-bottom: 0; }
-        .leave-dashboard .table thead th {
-          font-size: 0.8rem; font-weight: 600; color: var(--muted);
-          padding: 0.75rem 1rem; background: var(--canvas);
-          border-bottom: 1px solid var(--border); white-space: nowrap;
-        }
-        .leave-dashboard .table td { padding: 0.85rem 1rem; border-color: var(--border); }
-        .leave-dashboard .table tbody tr:last-child > td { border-bottom: none; }
-        .leave-dashboard .table tbody tr:hover > td { background: #FAFBFC; }
-
-        /* Detail panel */
-        .detail-panel-header {
-          background: var(--primary-soft); border-bottom: 1px solid var(--border);
-          padding: 1.25rem 1.5rem;
-        }
-
-        /* Empty, loading, alerts */
-        .empty-state {
-          text-align: center; color: var(--muted); font-size: 0.92rem;
-          padding: 1.75rem 1rem; border: 1px dashed #CDD4DC; border-radius: 12px; background: var(--canvas);
-        }
-        .loading-state { display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 3rem 0; color: var(--muted); font-size: 0.9rem; }
-        .leave-dashboard .alert-danger {
-          background: var(--danger-soft); color: var(--danger);
-          border: 1px solid #EBC5C0; border-radius: 10px;
-        }
-      `}</style>
-
       <Header />
 
       <main className="container-fluid px-3 px-md-4 py-4 py-md-5">
