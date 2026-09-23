@@ -5,7 +5,7 @@ const requestService = require('../services/requestServices');
 const adminController = {
     async getApprovedLeaveTitles(req, res) {
         try {
-            const requests = await adminServices.getApprovedLeaveTitles(req.query.search);
+            const requests = await adminServices.getApprovedLeaveTitles(req.query);
             res.status(200).json(requests);
         } catch (error) {
             res.status(400).json({ error: error.message });
@@ -15,7 +15,10 @@ const adminController = {
     async getLeaveRequests(req, res) {
         try {
             const employeeId = req.params.employeeId === undefined ? undefined : Number(req.params.employeeId);
-            const requests = await adminServices.getLeaveRequests(employeeId);
+            const requests = await adminServices.getLeaveRequests({
+                ...req.query,
+                employeeId: employeeId !== undefined ? employeeId : req.query.employeeId
+            });
             res.status(200).json(requests);
         } catch (error) {
             res.status(400).json({ error: error.message });

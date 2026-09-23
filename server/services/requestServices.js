@@ -2,6 +2,7 @@ const pool = require('../db');
 const path = require('path');
 const AdmZip = require('adm-zip');
 const { getExerciseYearForDate, calculateLeaveDuration } = require('../utils/helpers');
+const { createNotification, createLog } = require('../utils/dbUtils');
 
 const CREATOR_ROLES = ['chef_service', 'chef_departement', 'directeur'];
 
@@ -57,6 +58,9 @@ function computeAdvanceExerciseSplit(duration, exercises, currentExerciseYear) {
 
     if (!currentExercise || Number(currentExercise.balance) <= 0) {
         throw new Error(`Aucun solde disponible pour l’exercice en cours (${currentExerciseYear}).`);
+    }
+    if (requestedDuration > Number(currentExercise.balance)) {
+        throw new Error(`Vous ne pouvez pas demander plus de ${Number(currentExercise.balance)} jour(s) par anticipation (solde actuel de l'exercice en cours).`);
     }
     return [{
         exercise_id: currentExercise.exercise_id,
@@ -275,13 +279,13 @@ async function getHeadingUnit(unitId, conn = pool) {
     let query;
     let params;
     if (unit.type === 'service') {
-        query = 'SELECT * FROM Employe WHERE service_id = ? AND role = ?';
+        query = 'SELECT * FROM Employe WHERE service_id = ? AND role_leave_validation = ?';
         params = [unit.unit_id, 'chef_service'];
     } else if (unit.type === 'department') {
-        query = 'SELECT * FROM Employe WHERE departement_id = ? AND role = ?';
+        query = 'SELECT * FROM Employe WHERE departement_id = ? AND role_leave_validation = ?';
         params = [unit.unit_id, 'chef_departement'];
     } else {
-        query = 'SELECT * FROM Employe WHERE direction_id = ? AND role = ?';
+        query = 'SELECT * FROM Employe WHERE direction_id = ? AND role_leave_validation = ?';
         params = [unit.unit_id, 'directeur'];
     }
     const [rows] = await conn.query(query, params);
@@ -294,8 +298,8 @@ async function isSuperiorOf(superiorId, subordinateId, conn = pool) {
     }
 
     const [rows] = await conn.query(
-        `SELECT superior.id AS superior_id, superior.role AS superior_role,
-                subordinate.id AS subordinate_id, subordinate.role AS subordinate_role,
+        `SELECT superior.id AS superior_id, superior.role_leave_validation AS superior_role,
+                subordinate.id AS subordinate_id, subordinate.role_leave_validation AS subordinate_role,
                 superior.departement_id AS superior_departement_id,
                 COALESCE(superior.direction_id, superior_dep.direction_id, superior_service.direction_id) AS superior_direction_id,
                 subordinate.service_id AS subordinate_service_id,
@@ -349,7 +353,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
 
     let targetUnit;
 
-    if (currentEmp.role === 'employe') {
+    if (currentEmp.role_leave_validation === 'employe') {
         // Standard request submission from regular employee: forward to head of employee's unit (Service, Department, or Direction head)
         targetUnit = await getHeadingUnit(unitRow, conn);
         if (!targetUnit) {
@@ -360,7 +364,7 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
         );
     }
-    else if (currentEmp.role === 'chef_service') {
+    else if (currentEmp.role_leave_validation === 'chef_service') {
         // Step approved by chef_service -> forward to head of parent department (or parent direction if no department)
         const parentUnit = await getParentUnit(unitRow, conn);
         if (!parentUnit) {
@@ -375,24 +379,18 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
         );
     }
-    else if (currentEmp.role === 'chef_departement') {
+    else if (currentEmp.role_leave_validation === 'chef_departement') {
         // Step approved by chef_departement -> forward to director of direction (or HR if department is top-level direction)
         const parentUnit = await getParentUnit(unitRow, conn);
         if (parentUnit && parentUnit.type === 'direction') {
             targetUnit = await getHeadingUnit(parentUnit, conn);
         } else {
-            // If department has no parent direction or is already top level, forward to DRH
-            const [hrRows] = await conn.query('SELECT * FROM Employe WHERE role = ? AND direction_id = ?', ['drh', unitRow.direction_id]);
+            // If department has no parent direction or is already top level, forward to whoever is responsible for leave/RH duties
+            const [hrRows] = await conn.query('SELECT * FROM Employe WHERE is_leave_responsible = ?', [true]);
             if (hrRows.length === 0) {
-                // Fallback to any DRH if direction DRH not found
-                const [anyHrRows] = await conn.query('SELECT * FROM Employe WHERE role = ?', ['drh']);
-                if (anyHrRows.length === 0) {
-                    throw new Error('Aucun employé RH trouvé dans le système.');
-                }
-                targetUnit = anyHrRows[0];
-            } else {
-                targetUnit = hrRows[0];
+                throw new Error('Aucun employé RH trouvé dans le système.');
             }
+            targetUnit = hrRows[0];
         }
 
         if (!targetUnit) {
@@ -403,22 +401,29 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
             [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
         );
     }
-    else if (currentEmp.role === 'directeur') {
-        // Step approved by directeur -> forward to HR (DRH)
-        const [hrRows] = await conn.query('SELECT * FROM Employe WHERE role = ? AND direction_id = ?', ['drh', unitRow.direction_id ?? unitRow.unit_id]);
-        if (hrRows.length === 0) {
-            const [anyHrRows] = await conn.query('SELECT * FROM Employe WHERE role = ?', ['drh']);
-            if (anyHrRows.length === 0) {
-                throw new Error(`Aucun DRH trouvé pour la direction « ${unitRow.direction_name} ».`);
-            }
-            targetUnit = anyHrRows[0];
-        } else {
-            targetUnit = hrRows[0];
+    else if (currentEmp.role_leave_validation === 'directeur') {
+        // Annual and exceptional leave are fully approved once the directeur signs off.
+        // Advance leave still needs a final check by whoever is responsible for leave (is_leave_responsible),
+        // since that role is independent of role_leave_validation (no 'drh' value there).
+        const [requestRows] = await conn.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
+        if (requestRows.length === 0) {
+            throw new Error('Demande introuvable.');
         }
-        await conn.query(
-            'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
-            [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
-        );
+        const request = requestRows[0];
+        if (request.leave_type === 'advance') {
+            const [hrRows] = await conn.query('SELECT * FROM Employe WHERE is_leave_responsible = ?', [true]);
+            if (hrRows.length === 0) {
+                throw new Error(`Aucun responsable RH trouvé pour valider ce congé par anticipation.`);
+            }
+            targetUnit = hrRows[0];
+            await conn.query(
+                'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
+            );
+        } else {
+            // No further step: the caller treats a null return as final approval.
+            targetUnit = null;
+        }
     }
     return targetUnit;
 }
@@ -473,21 +478,6 @@ async function assertStepAccess(stepId, currentUserId, currentUserRole, conn = p
 
     return stepRows[0];
 }
-async function createNotification({ targetId, requestId, content }, connection = null) {
-    if (!targetId || !content) {
-        return;
-    }
-    try {
-        const currentTimestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const query = 'INSERT INTO Notification (target_id, request_id, content, is_read, created_at) VALUES (?, ?, ?, ?, ?)';
-        const values = [targetId, requestId || null, content, false, currentTimestamp];
-        const runner = connection || pool;
-        await runner.query(query, values);
-    } catch (err) {
-        console.error('Error creating notification:', err.message);
-    }
-}
-
 function getRoleLabel(role) {
     return {
         employe: 'employé',
@@ -532,7 +522,7 @@ const requestService = {
             const creator = creatorRows[0];
             const isCreatingForEmployee = requestedEmployeeId !== creatorId;
             if (isCreatingForEmployee) {
-                if (!CREATOR_ROLES.includes(creator.role) || !creator.can_create_for_employee) {
+                if (!CREATOR_ROLES.includes(creator.role_leave_validation) || !creator.can_create_for_employee) {
                     throw new Error('Vous n’êtes pas autorisé à créer une demande pour un autre employé.');
                 }
 
@@ -542,7 +532,7 @@ const requestService = {
                      LEFT JOIN Service s ON s.id = e.service_id
                      LEFT JOIN Departement dep ON dep.id = COALESCE(e.departement_id, s.departement_id)
                      WHERE e.id = ?
-                       AND e.role = 'employe'
+                       AND e.role_leave_validation = 'employe'
                        AND (
                          (? = 'chef_service' AND e.service_id = ?)
                          OR (? = 'chef_departement' AND COALESCE(e.departement_id, s.departement_id) = ?)
@@ -561,10 +551,10 @@ const requestService = {
                 throw new Error('Employé introuvable.');
             }
 
-            const employeeRole = employeeRows[0].role;
-            if (employeeRole === 'directeur' || employeeRole === 'drh') {
-                throw new Error('Les directeurs et le DRH ne peuvent pas soumettre de demande de congé via le workflow standard. Veuillez contacter l’administration.');
-            }
+            const employeeRole = employeeRows[0].role_leave_validation;
+            //if (employeeRole === 'directeur' || employeeRole === 'drh') {
+            //    throw new Error('Les directeurs et le DRH ne peuvent pas soumettre de demande de congé via le workflow standard. Veuillez contacter l’administration.');
+            //}
 
             const [pendingRequests] = await connection.query(
                 'SELECT * FROM Leave_request WHERE Emp_id = ? AND request_status = ?',
@@ -594,9 +584,10 @@ const requestService = {
             }
 
             await connection.beginTransaction();
+            const current_date = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const [result] = await connection.query(
-                'INSERT INTO Leave_request (Emp_id, created_by, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [employeeId, creatorId, Number(exerciseYear), leaveType, startDate, effectiveDuration, normalizedReasonType || null, normalizedJustification || null, url ?? null, 'pending', new Date().toISOString().slice(0, 19).replace('T', ' ')]
+                'INSERT INTO Leave_request (Emp_id, created_by, exercise, leave_type, start_date, duration, reason_type, justification, url_justification, request_status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [employeeId, creatorId, Number(exerciseYear), leaveType, startDate, effectiveDuration, normalizedReasonType || null, normalizedJustification || null, url ?? null, 'pending', current_date, current_date]
             );
 
             if (leaveType === 'annual') {
@@ -608,20 +599,8 @@ const requestService = {
                     throw new Error(`Vous disposez encore d'un solde dans un ou plusieurs exercices précédents. Veuillez utiliser ce solde avant de demander un congé par anticipation.`);
                 }
 
-                // Advance leave is capped at 30 days per exercise, cumulative across all
-                // approved advance requests for that exercise (not per individual request).
-                const [advanceUsageRows] = await connection.query(
-                    `SELECT COALESCE(SUM(ra.days_allocated), 0) AS total_days
-                     FROM Request_exercise_allocation ra
-                     JOIN Leave_request lr ON lr.request_id = ra.request_id
-                     WHERE lr.Emp_id = ? AND lr.leave_type = 'advance' AND lr.request_status = 'approved' AND lr.exercise = ?`,
-                    [employeeId, exerciseYear]
-                );
-                const advanceUsedThisExercise = Number(advanceUsageRows[0].total_days) || 0;
-                if (advanceUsedThisExercise + effectiveDuration > 30) {
-                    throw new Error(`La limite de 30 jours de congé par anticipation pour cet exercice est dépassée : ${advanceUsedThisExercise} jour(s) déjà approuvé(s), ${effectiveDuration} jour(s) supplémentaires demandés.`);
-                }
-
+                // Advance leave is capped against the employee's existing current-exercise
+                // balance (see computeAdvanceExerciseSplit) — no separate flat cap needed.
                 const [currentExerciseRows] = await connection.query('SELECT * FROM Exercise WHERE Emp_id = ? AND year = ?', [employeeId, exerciseYear]);
                 const advanceAllocations = computeAdvanceExerciseSplit(effectiveDuration, currentExerciseRows, exerciseYear);
                 for (const allocation of advanceAllocations) {
@@ -652,6 +631,7 @@ const requestService = {
                         : `${employeeRows[0].nom} ${employeeRows[0].prenom} vous a soumis une demande de congé du ${startDate} au ${endDate}.`
                 }, connection);
             }
+            await createLog(creatorId, 'REQUEST_CREATED', `Demande #${result.insertId} (${leaveType}) créée pour l'employé #${employeeId}, du ${startDate} pour ${effectiveDuration} jour(s).`, connection);
             await connection.commit();
             return result.insertId;
         } catch (error) {
@@ -757,7 +737,7 @@ const requestService = {
             const approver = approverRows[0];
             const isAssignedTarget = Number(step.target_id) === Number(currentUserId);
             const isBypass = !isAssignedTarget
-                && ['chef_departement', 'directeur'].includes(approver.role)
+                && ['chef_departement', 'directeur'].includes(approver.role_leave_validation)
                 && await isSuperiorOf(currentUserId, step.target_id, connection);
 
             const [requestRows] = await connection.query('SELECT * FROM Leave_request WHERE request_id = ? FOR UPDATE', [step.request_id]);
@@ -789,33 +769,39 @@ const requestService = {
                     requestId: request.request_id,
                     content: `Votre demande de congé du ${request.start_date} a été refusée par ${approverName}.`
                 });
-            } else if (approver.role === 'drh' && !isBypass) {
-                await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['approved', request.request_id]);
-                if (request.leave_type === 'annual') {
-                    await applyApprovedAnnualAllocations(request.request_id, connection);
-                } else if (request.leave_type === 'advance') {
-                    await applyApprovedAdvanceAllocations(request.request_id, connection);
-                }
-                notifications.push({
-                    targetId: request.Emp_id,
-                    requestId: request.request_id,
-                    content: `Votre demande de congé du ${request.start_date} a été approuvée par ${approverName}.`
-                });
+                await createLog(currentUserId, 'REQUEST_REJECTED', `Demande #${request.request_id} refusée par ${approverName}.`, connection);
             } else {
                 const forwardingId = isBypass ? currentUserId : step.target_id;
                 nextTarget = await forwardRequestToNextStep(request.request_id, forwardingId, null, null, connection);
-                if (nextTarget) {
+
+                if (nextTarget && nextTarget.id) {
+                    // There is a further step: the request stays pending, moved to the next approver.
                     notifications.push({
                         targetId: nextTarget.id,
                         requestId: request.request_id,
                         content: `Une demande de congé vous a été transmise pour examen par ${approverName}.`
                     });
+                    notifications.push({
+                        targetId: request.Emp_id,
+                        requestId: request.request_id,
+                        content: `Votre demande de congé a été approuvée par ${approverName} et transmise à l'étape suivante.`
+                    });
+                    await createLog(currentUserId, 'REQUEST_FORWARDED', `Demande #${request.request_id} approuvée par ${approverName} et transmise à l'employé #${nextTarget.id}.`, connection);
+                } else {
+                    // No further step: this was the final approval.
+                    await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['approved', request.request_id]);
+                    if (request.leave_type === 'annual') {
+                        await applyApprovedAnnualAllocations(request.request_id, connection);
+                    } else if (request.leave_type === 'advance') {
+                        await applyApprovedAdvanceAllocations(request.request_id, connection);
+                    }
+                    notifications.push({
+                        targetId: request.Emp_id,
+                        requestId: request.request_id,
+                        content: `Votre demande de congé du ${request.start_date} a été approuvée par ${approverName}.`
+                    });
+                    await createLog(currentUserId, 'REQUEST_APPROVED_FINAL', `Demande #${request.request_id} approuvée définitivement par ${approverName}.`, connection);
                 }
-                notifications.push({
-                    targetId: request.Emp_id,
-                    requestId: request.request_id,
-                    content: `Votre demande de congé a été approuvée par ${approverName} et transmise à l'étape suivante.`
-                });
             }
 
             await connection.commit();
@@ -870,6 +856,7 @@ const requestService = {
                 await refundApprovedAllocations(requestId, daysToRefund, connection);
             }
             await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['cancelled', requestId]);
+            await createLog(currentUserId, 'REQUEST_CANCELLED', `Demande #${requestId} annulée (${daysToRefund} jour(s) remboursé(s)).`, connection);
             await connection.commit();
         } catch (error) {
             await connection.rollback();

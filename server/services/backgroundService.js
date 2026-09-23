@@ -1,6 +1,6 @@
 const pool = require('../db');
 const { getExerciseWindowForDate, getExerciseYearForDate, assignBalance } = require('../utils/helpers');
-const { createNotification } = require('../utils/dbUtils');
+const { createNotification, createLog } = require('../utils/dbUtils');
 
 let cron = null;
 try {
@@ -36,7 +36,7 @@ const backgroundService = {
     async createNewExercise() {
         try {
             const { currentExerciseYear, nextExerciseYear } = getExerciseWindowForDate(new Date());
-            const [employees] = await pool.query(`SELECT id FROM Employe`);
+            const [employees] = await pool.query(`SELECT id FROM Employe WHERE role != 'admin'`);
 
             for (const employee of employees) {
                 for (const exerciseYear of [currentExerciseYear, nextExerciseYear]) {
@@ -52,6 +52,15 @@ const backgroundService = {
                             `INSERT IGNORE INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, 0, NOW())`,
                             [employee.id, exerciseYear]
                         );
+                        // insert log
+                        await createLog({
+                            empId: employee.id,
+                            action: 'create_Exercise',
+                            requestId: null,
+                            meta: {
+                                exerciseYear,
+                            }
+                        })
                     }
                 }
             }
@@ -63,7 +72,7 @@ const backgroundService = {
     // Adds 2.5 balance for each employee
     async updateExerciseBalances() {
         try {
-            const [employees] = await pool.query('SELECT id, date_entree FROM Employe');
+            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role != 'admin'`);
             const now = new Date();
             const exerciseYear = getExerciseYearForDate(now);
 
@@ -81,7 +90,16 @@ const backgroundService = {
                     `UPDATE Exercise SET balance = balance + ? WHERE Emp_id = ? AND year = ?`,
                     [balanceToAdd, employee.id, exerciseYear]
                 );
-
+                // insert log
+                await createLog({
+                    empId: employee.id,
+                    action: 'update_Exercise',
+                    requestId: null,
+                    meta: {
+                        exerciseYear,
+                        balanceToAdd
+                    }
+                })
                 // Create notification for employee
                 await createNotification({
                     targetId: employee.id,

@@ -6,7 +6,7 @@ const DEFAULT_PASSWORD = 'Passw0rd!';
 
 async function reset(conn) {
   await conn.query('SET FOREIGN_KEY_CHECKS = 0');
-  for (const table of ['Notification', 'Request_exercise_allocation', 'Request_step', 'Leave_request', 'Exercise', 'Employe', 'Service', 'Departement', 'Direction']) {
+  for (const table of ['Logs', 'Notification', 'Request_exercise_allocation', 'Request_step', 'Leave_request', 'Exercise', 'Employe', 'Service', 'Departement', 'Direction']) {
     await conn.query(`TRUNCATE TABLE ${table}`);
   }
   await conn.query('SET FOREIGN_KEY_CHECKS = 1');
@@ -28,21 +28,22 @@ async function seedOrgStructure(conn) {
     );
     departements[nom] = result.insertId;
   };
-  const insertService = async (nom, departementKey) => {
+  const insertService = async (nom, departementKey, directionKey) => {
     const [result] = await conn.query(
-      'INSERT INTO Service (nom, departement_id) VALUES (?, ?)',
-      [nom, departements[departementKey]]
+      'INSERT INTO Service (nom, direction_id, departement_id) VALUES (?, ?, ?)',
+      [nom, directions[directionKey], departements[departementKey]]
     );
     services[nom] = result.insertId;
   };
 
-  await insertDirection('Direction Générale');
-  await insertDepartement('Département RH', 'Direction Générale');
-  await insertDepartement('Département IT', 'Direction Générale');
-  await insertService('Section Recrutement', 'Département RH');
-  await insertService('Section Paie', 'Département RH');
-  await insertService('Section Dev', 'Département IT');
-  await insertService('Section Infra', 'Département IT');
+  await insertDirection('Direction RH');
+  await insertDirection('Direction IT');
+  await insertDepartement('Département RH', 'Direction RH');
+  await insertDepartement('Département IT', 'Direction IT');
+  await insertService('Section Recrutement', 'Département RH', 'Direction RH');
+  await insertService('Section Paie', 'Département RH', 'Direction RH');
+  await insertService('Section Dev', 'Département IT', 'Direction IT');
+  await insertService('Section Infra', 'Département IT', 'Direction IT');
 
   return { directions, departements, services };
 }
@@ -55,39 +56,44 @@ async function seedEmployees(conn, org) {
   // canCreate: value of can_create_for_employee (right given by the admin to create a request for an employee under them)
 
   const roster = [
-    { key: 'dg',       first: 'Karim',   last: 'Benali',     email: 'karim.benali@corp.dz',      role: 'directeur',       level: 'direction',   unit: 'Direction Générale',  date: '2015-01-12' },
-    { key: 'deptRH',   first: 'Amina',   last: 'Toumi',      email: 'amina.toumi@corp.dz',        role: 'chef_departement', level: 'departement', unit: 'Département RH',       date: '2016-03-01' },
-    { key: 'deptIT',   first: 'Yacine',  last: 'Merabet',    email: 'yacine.merabet@corp.dz',     role: 'chef_departement', level: 'departement', unit: 'Département IT',       date: '2016-06-20', canCreate: true },
-    { key: 'secRecru', first: 'Sofia',   last: 'Haddad',     email: 'sofia.haddad@corp.dz',       role: 'chef_service',    level: 'service',     unit: 'Section Recrutement', date: '2018-02-15', canCreate: true },
-    { key: 'secPaie',  first: 'Riad',    last: 'Belkacem',   email: 'riad.belkacem@corp.dz',      role: 'chef_service',    level: 'service',     unit: 'Section Paie',   date: '2018-04-10' },
-    { key: 'secDev',   first: 'Nadia',   last: 'Cherif',     email: 'nadia.cherif@corp.dz',       role: 'chef_service',    level: 'service',     unit: 'Section Dev',      date: '2017-09-05', canCreate: true },
-    { key: 'secInfra', first: 'Farid',   last: 'Boumediene', email: 'farid.boumediene@corp.dz',   role: 'chef_service',    level: 'service',     unit: 'Section Infra',       date: '2017-11-22' },
-    { key: 'hr',       first: 'Lina',    last: 'Zerrouki',   email: 'lina.zerrouki@corp.dz',      role: 'drh',             level: 'direction',   unit: 'Direction Générale',   date: '2019-01-08' },
-    { key: 'admin',    first: 'Yasmine', last: 'Kaci',       email: 'yasmine.kaci@corp.dz',       role: 'admin',           level: 'direction',   unit: 'Direction Générale',  date: '2015-01-05' },
-    { key: 'e1', first: 'Mounir',  last: 'Saidi',    email: 'mounir.saidi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Recrutement',  date: '2021-03-01' },
-    { key: 'e2', first: 'Amel',    last: 'Bouzid',   email: 'amel.bouzid@corp.dz',     role: 'employe', level: 'service', unit: 'Section Recrutement',  date: '2022-05-14' },
-    { key: 'e3', first: 'Walid',   last: 'Ammar',    email: 'walid.ammar@corp.dz',     role: 'employe', level: 'service', unit: 'Section Paie',  date: '2020-09-19' },
-    { key: 'e4', first: 'Nesrine', last: 'Kaddour',  email: 'nesrine.kaddour@corp.dz', role: 'employe', level: 'service', unit: 'Section Paie',  date: '2021-11-02' },
-    { key: 'e5', first: 'Hicham',  last: 'Bendaoud', email: 'hicham.bendaoud@corp.dz', role: 'employe', level: 'service', unit: 'Section Dev',   date: '2020-06-23' },
-    { key: 'e6', first: 'Sarah',   last: 'Ouali',    email: 'sarah.ouali@corp.dz',     role: 'employe', level: 'service', unit: 'Section Dev',  date: '2022-01-17' },
-    { key: 'e7', first: 'Bilal',   last: 'Rahmani',  email: 'bilal.rahmani@corp.dz',   role: 'employe', level: 'service', unit: 'Section Infra', date: '2021-08-09' },
-    { key: 'e8', first: 'Sami',    last: 'Grine',    email: 'sami.grine@corp.dz',      role: 'employe', level: 'service', unit: 'Section Infra', date: '2023-02-10' },
-    { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',   date: '2026-09-10' },
-    { key: 'e10', first: 'Amine', last: 'Ferhat',    email: 'amine.ferhat@corp.dz',    role: 'employe', level: 'departement', unit: 'Département RH', date: '2020-04-12' },
-{ key: 'e11', first: 'Lydia', last: 'Mansouri',  email: 'lydia.mansouri@corp.dz',  role: 'employe', level: 'departement', unit: 'Département IT', date: '2021-07-03' },]
-  ;
+    { key: 'dirRH',    first: 'Khadija', last: 'Benali',     email: 'khadija.benali@corp.dz',    role: 'directeur',       level: 'direction',   unit: 'Direction RH',        date: '2015-01-12', fonction: 'Directrice RH',                 roleValidation: 'directeur' },
+    { key: 'dirIT',    first: 'Karim',   last: 'Merabet',    email: 'karim.merabet@corp.dz',     role: 'directeur',       level: 'direction',   unit: 'Direction IT',        date: '2015-02-15', fonction: 'Directeur IT',                  roleValidation: 'directeur' },
+    { key: 'deptRH',   first: 'Amina',   last: 'Toumi',      email: 'amina.toumi@corp.dz',        role: 'chef_departement', level: 'departement', unit: 'Département RH',       date: '2016-03-01', fonction: 'Chef de Département RH',          roleValidation: 'chef_departement' },
+    { key: 'deptIT',   first: 'Yacine',  last: 'Mansouri',   email: 'yacine.mansouri@corp.dz',    role: 'chef_departement', level: 'departement', unit: 'Département IT',       date: '2016-06-20', fonction: 'Chef de Département IT',          roleValidation: 'chef_departement', canCreate: true },
+    { key: 'secRecru', first: 'Sofia',   last: 'Haddad',     email: 'sofia.haddad@corp.dz',       role: 'chef_service',    level: 'service',     unit: 'Section Recrutement', date: '2018-02-15', fonction: 'Chef de Service Recrutement',     roleValidation: 'chef_service', canCreate: true },
+    { key: 'secPaie',  first: 'Riad',    last: 'Belkacem',   email: 'riad.belkacem@corp.dz',      role: 'chef_service',    level: 'service',     unit: 'Section Paie',        date: '2018-04-10', fonction: 'Chef de Service Paie',             roleValidation: 'chef_service' },
+    { key: 'secDev',   first: 'Nadia',   last: 'Cherif',     email: 'nadia.cherif@corp.dz',       role: 'chef_service',    level: 'service',     unit: 'Section Dev',         date: '2017-09-05', fonction: 'Chef de Service Dev',              roleValidation: 'chef_service', canCreate: true },
+    { key: 'secInfra', first: 'Farid',   last: 'Boumediene', email: 'farid.boumediene@corp.dz',   role: 'chef_service',    level: 'service',     unit: 'Section Infra',       date: '2017-11-22', fonction: 'Chef de Service Infra',            roleValidation: 'chef_service' },
+    { key: 'hr',       first: 'Lina',    last: 'Zerrouki',   email: 'lina.zerrouki@corp.dz',      role: 'drh',             level: 'direction',   unit: 'Direction RH',        date: '2019-01-08', fonction: 'Directrice des Ressources Humaines', roleValidation: 'directeur', isLeaveResponsible: true },
+    { key: 'admin',    first: 'Yasmine', last: 'Kaci',       email: 'yasmine.kaci@corp.dz',       role: 'admin',           level: 'direction',   unit: 'Direction IT',        date: '2015-01-05', fonction: 'Administrateur système',           roleValidation: 'admin' },
+    { key: 'e1', first: 'Mounir',  last: 'Saidi',    email: 'mounir.saidi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Recrutement',  date: '2021-03-01', fonction: 'Chargé de Recrutement' },
+    { key: 'e2', first: 'Amel',    last: 'Bouzid',   email: 'amel.bouzid@corp.dz',     role: 'employe', level: 'service', unit: 'Section Recrutement',  date: '2022-05-14', fonction: 'Chargée de Recrutement' },
+    { key: 'e3', first: 'Walid',   last: 'Ammar',    email: 'walid.ammar@corp.dz',     role: 'employe', level: 'service', unit: 'Section Paie',         date: '2020-09-19', fonction: 'Gestionnaire de Paie' },
+    { key: 'e4', first: 'Nesrine', last: 'Kaddour',  email: 'nesrine.kaddour@corp.dz', role: 'employe', level: 'service', unit: 'Section Paie',         date: '2021-11-02', fonction: 'Gestionnaire de Paie' },
+    { key: 'e5', first: 'Hicham',  last: 'Bendaoud', email: 'hicham.bendaoud@corp.dz', role: 'employe', level: 'service', unit: 'Section Dev',          date: '2020-06-23', fonction: 'Développeur Full Stack' },
+    { key: 'e6', first: 'Sarah',   last: 'Ouali',    email: 'sarah.ouali@corp.dz',     role: 'employe', level: 'service', unit: 'Section Dev',          date: '2022-01-17', fonction: 'Développeuse Front-end' },
+    { key: 'e7', first: 'Bilal',   last: 'Rahmani',  email: 'bilal.rahmani@corp.dz',   role: 'employe', level: 'service', unit: 'Section Infra',        date: '2021-08-09', fonction: 'Ingénieur Système' },
+    { key: 'e8', first: 'Sami',    last: 'Grine',    email: 'sami.grine@corp.dz',      role: 'employe', level: 'service', unit: 'Section Infra',        date: '2023-02-10', fonction: 'Ingénieur Réseau' },
+    { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',          date: '2026-09-10', fonction: 'Stagiaire Développeuse' },
+    { key: 'e10', first: 'Amine', last: 'Ferhat',    email: 'amine.ferhat@corp.dz',    role: 'employe', level: 'departement', unit: 'Département RH',   date: '2020-04-12', fonction: 'Assistant RH' },
+    { key: 'e11', first: 'Lydia', last: 'Mansouri',  email: 'lydia.mansouri@corp.dz',  role: 'employe', level: 'departement', unit: 'Département IT',   date: '2021-07-03', fonction: 'Technicienne IT' },
+  ];
 
   for (const [index, p] of roster.entries()) {
     const directionId = p.level === 'direction' ? org.directions[p.unit] : null;
     const departementId = p.level === 'departement' ? org.departements[p.unit] : null;
     const serviceId = p.level === 'service' ? org.services[p.unit] : null;
 
+    const roleValidation = p.roleValidation || (['directeur', 'chef_departement', 'chef_service', 'admin'].includes(p.role) ? p.role : 'employe');
+    const isLeaveResp = p.isLeaveResponsible ? 1 : 0;
+    const fonction = p.fonction || null;
+
     // For service-based employees, keep service_id populated.
     // For department/direction employees, attach directly to the parent unit and leave service_id null.
     const [result] = await conn.query(
-      `INSERT INTO Employe (nom, nom_jeune_fille, prenom, email, password, date_entree, role, direction_id, departement_id, service_id, matricule, can_create_for_employee)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [p.last, p.last, p.first, p.email, hashedPw, p.date, p.role, directionId, departementId, serviceId, 1001 + index, p.canCreate ? 1 : 0]
+      `INSERT INTO Employe (nom, nom_jeune_fille, prenom, email, password, date_entree, role, direction_id, departement_id, service_id, matricule, fonction, can_create_for_employee, role_leave_validation, is_leave_responsible)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.last, p.last, p.first, p.email, hashedPw, p.date, p.role, directionId, departementId, serviceId, 1001 + index, fonction, p.canCreate ? 1 : 0, roleValidation, isLeaveResp]
     );
     emp[p.key] = result.insertId;
   }
@@ -167,16 +173,16 @@ async function seedLeaveRequestsAndSteps(conn, emp, exercises) {
   const steps = [
     // r1: waiting for the chef de service
     ['r1', [['secRecru', null, null, null]]],
-    // r2: fully approved through the DRH
-    ['r2', [['secRecru', 'approved', '2026-09-18 09:00:00', 'OK'], ['deptRH', 'approved', '2026-09-18 14:00:00', 'OK'], ['dg', 'approved', '2026-09-19 09:00:00', 'Validated'], ['hr', 'approved', '2026-09-19 10:00:00', 'Final approval']]],
+    // r2: fully approved through the DRH (RH branch -> dirRH)
+    ['r2', [['secRecru', 'approved', '2026-09-18 09:00:00', 'OK'], ['deptRH', 'approved', '2026-09-18 14:00:00', 'OK'], ['dirRH', 'approved', '2026-09-19 09:00:00', 'Validated'], ['hr', 'approved', '2026-09-19 10:00:00', 'Final approval']]],
     // r3: rejected by the chef de service
     ['r3', [['secPaie', 'rejected', '2026-09-14 11:00:00', 'Insufficient notice']]],
     // r4: chef de service approved, waiting for the chef de département
     ['r4', [['secPaie', 'approved', '2026-10-25 10:00:00', 'OK'], ['deptRH', null, null, null]]],
-    // r5: approved by everyone, then cancelled by the employee
-    ['r5', [['secDev', 'approved', '2026-11-20 10:00:00', 'OK'], ['deptIT', 'approved', '2026-11-20 11:00:00', 'OK'], ['dg', 'approved', '2026-11-20 12:00:00', 'Approved then cancelled by employee'], ['hr', 'approved', '2026-11-20 13:00:00', 'Final approval']]],
-    // r6: bypass approved by the chef de département, waiting for the directeur
-    ['r6', [['secDev', 'skipped', '2026-08-25 09:00:00', null], ['deptIT', 'approved', '2026-08-25 09:00:00', 'Approved directly by department head'], ['dg', null, null, null]]],
+    // r5: approved by everyone, then cancelled by the employee (IT branch -> dirIT)
+    ['r5', [['secDev', 'approved', '2026-11-20 10:00:00', 'OK'], ['deptIT', 'approved', '2026-11-20 11:00:00', 'OK'], ['dirIT', 'approved', '2026-11-20 12:00:00', 'Approved then cancelled by employee'], ['hr', 'approved', '2026-11-20 13:00:00', 'Final approval']]],
+    // r6: bypass approved by the chef de département, waiting for the directeur (IT branch -> dirIT)
+    ['r6', [['secDev', 'skipped', '2026-08-25 09:00:00', null], ['deptIT', 'approved', '2026-08-25 09:00:00', 'Approved directly by department head'], ['dirIT', null, null, null]]],
     // r7: waiting for the chef de service
     ['r7', [['secInfra', null, null, null]]],
     // r8: bypass rejection by the chef de département

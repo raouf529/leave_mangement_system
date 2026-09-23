@@ -1,319 +1,237 @@
-import { Fragment, useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import useCurrentUser from '../hooks/useCurrentUser';
 import api from './api';
-import Header from './header';
-import './EmployeeDetails.css';
+import logo from '../assets/Nouveau logo catering .jpeg';
+import './header.css';
 
-const LEAVE_TYPE_LABELS = {
-  annual: 'Congé annuel',
-  exceptional: 'Congé exceptionnel',
-  advance: 'Avance sur congé',
-};
+const LOGO_SRC = logo;
 
-const ROLE_LABELS = {
-  admin: 'Administrateur',
-  head: 'Chef',
-  hr: 'RH',
-  employee: 'Employé',
-  directeur: 'Directeur',
-  chef_departement: 'Chef de département',
-  chef_service: 'Chef de service',
-  drh: 'DRH',
-  employe: 'Employé',
-};
-
-const STEP_ROLE_OPTIONS = ['chef_service', 'chef_departement', 'directeur', 'drh'];
-
-const STATUS_LABELS = {
-  pending: 'En attente',
-  approved: 'Approuvée',
-  rejected: 'Refusée',
-  cancelled: 'Annulée',
-  'time out': 'Expirée',
-};
-
-const STATUS_STYLES = {
-  pending: { bg: '#FFF2C7', fg: '#AF5B00' },
-  approved: { bg: '#C8F7E5', fg: '#008B68' },
-  rejected: { bg: '#FBEAE8', fg: '#C1544A' },
-  cancelled: { bg: '#EEF1F4', fg: '#65707D' },
-  'time out': { bg: '#EEF1F4', fg: '#65707D' },
-};
-
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString('fr-FR');
-}
-
-function getEndDate(startDate, duration) {
-  if (!startDate) return null;
-  const date = new Date(startDate);
-  date.setDate(date.getDate() + (Number(duration) || 0) - 1);
-  return date;
-}
-
-function initialsOf(firstName, lastName) {
-  return `${(firstName || '').trim().charAt(0)}${(lastName || '').trim().charAt(0)}`.toUpperCase() || '?';
-}
-
-function StatusBadge({ status }) {
-  const style = STATUS_STYLES[status] ?? STATUS_STYLES.cancelled;
-  return (
-    <span className="employee-details-status" style={{ background: style.bg, color: style.fg }}>
-      <span className="employee-details-status-dot" style={{ background: style.fg }} />
-      {STATUS_LABELS[status] ?? status}
-    </span>
-  );
-}
-
-function Feedback({ status }) {
-  if (!status) return null;
-  return <div className={`employee-details-feedback ${status.type}`}>{status.message}</div>;
-}
-
-function ExerciseTable({ employeeId, exercises, onRefresh }) {
-  const [showCreate, setShowCreate] = useState(false);
-  const [year, setYear] = useState('');
-  const [initialBalance, setInitialBalance] = useState('');
-  const [editingYear, setEditingYear] = useState(null);
-  const [balance, setBalance] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState(null);
-
-  async function handleCreate(event) {
-    event.preventDefault();
-    setLoading(true);
-    setFeedback(null);
-    try {
-      await api.post('/admin/create-exercise-by-id', {
-        empId: Number(employeeId),
-        year: Number(year),
-        balance: Number(initialBalance),
-      });
-      setYear('');
-      setInitialBalance('');
-      setShowCreate(false);
-      setFeedback({ type: 'success', message: `Exercice ${year} créé.` });
-      onRefresh();
-    } catch (error) {
-      setFeedback({ type: 'error', message: error.response?.data?.error || error.message });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleBalanceUpdate(event) {
-    event.preventDefault();
-    setLoading(true);
-    setFeedback(null);
-    try {
-      await api.post('/admin/update-exercise-balance', {
-        empId: Number(employeeId),
-        year: Number(editingYear),
-        balance: Number(balance),
-      });
-      setEditingYear(null);
-      setBalance('');
-      setFeedback({ type: 'success', message: 'Solde mis à jour.' });
-      onRefresh();
-    } catch (error) {
-      setFeedback({ type: 'error', message: error.response?.data?.error || error.message });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function startEditing(exercise) {
-    setEditingYear(exercise.exercise);
-    setBalance(exercise.balance);
-    setFeedback(null);
-  }
-
-  return (
-    <section className="employee-details-section">
-      <div className="employee-details-section-heading">
-        <h2>Exercices</h2>
-        <button type="button" className="employee-details-primary" onClick={() => setShowCreate((open) => !open)}>
-          {showCreate ? 'Annuler' : '+ Créer un exercice'}
-        </button>
-      </div>
-
-      {showCreate && (
-        <form className="employee-details-form" onSubmit={handleCreate}>
-          <label htmlFor="exercise-year">Année fiscale</label>
-          <input id="exercise-year" type="number" value={year} onChange={(event) => setYear(event.target.value)} placeholder="2026" required />
-          <label htmlFor="exercise-balance">Solde initial (0 à 30 jours)</label>
-          <input id="exercise-balance" type="number" min="0" max="30" step="0.5" value={initialBalance} onChange={(event) => setInitialBalance(event.target.value)} placeholder="0" required />
-          <button type="submit" className="employee-details-primary" disabled={loading}>Créer</button>
-        </form>
-      )}
-
-      {exercises.length === 0 ? (
-        <p className="employee-details-muted">Aucun exercice trouvé pour cet employé.</p>
-      ) : (
-        <div className="table-responsive">
-          <table className="table align-middle employee-details-table">
-            <thead><tr><th>Exercice</th><th>Solde</th><th className="text-end">Action</th></tr></thead>
-            <tbody>
-              {exercises.map((exercise) => (
-                <tr key={exercise.exercise}>
-                  <td>{exercise.exercise}</td>
-                  <td>{editingYear === exercise.exercise ? (
-                    <form className="employee-details-inline-form" onSubmit={handleBalanceUpdate}>
-                      <input type="number" step="0.5" value={balance} onChange={(event) => setBalance(event.target.value)} required aria-label={`Nouveau solde ${exercise.exercise}`} />
-                      <button type="submit" className="employee-details-primary" disabled={loading}>Enregistrer</button>
-                    </form>
-                  ) : `${exercise.balance} j`}</td>
-                  <td className="text-end">
-                    {editingYear !== exercise.exercise && (
-                      <button type="button" className="employee-details-secondary" onClick={() => startEditing(exercise)}>Modifier le solde</button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <Feedback status={feedback} />
-    </section>
-  );
-}
-
-export default function EmployeeDetails() {
-  const { employeeId } = useParams();
+function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
+  const [openMenu, setOpenMenu] = useState(false);
+  const [openNotifications, setOpenNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
-  const [detail, setDetail] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [requests, setRequests] = useState([]);
-  const [requestError, setRequestError] = useState('');
-  const [expandedRequests, setExpandedRequests] = useState({});
-  const [stepEdits, setStepEdits] = useState({});
-  const [updatingStep, setUpdatingStep] = useState(null);
+  const { pathname } = useLocation();
+  const linkProps = (path) => ({
+    className: `menu-link${pathname === path ? ' active' : ''}`,
+    'aria-current': pathname === path ? 'page' : undefined
+  });
+  const { fullName, role, roleLabel } = useCurrentUser();
 
-  async function fetchDetail() {
-    setLoading(true);
-    try {
-      const response = await api.get(`/profile/${employeeId}`);
-      setDetail(response.data);
-      setError('');
-    } catch (requestError) {
-      setError(requestError.response?.data?.error || 'Impossible de charger les informations de cet employé.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchRequests() {
-    try {
-      const response = await api.get(`/admin/leave-requests/employee/${employeeId}`);
-      setRequests(response.data ?? []);
-      setRequestError('');
-    } catch (requestErrorResponse) {
-      setRequestError(requestErrorResponse.response?.data?.error || 'Impossible de charger les étapes des demandes.');
-    }
-  }
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(() => {
-    fetchDetail();
-    fetchRequests();
-  }, [employeeId]);
+    let isMounted = true;
 
-  function updateStepEdit(stepId, field, value) {
-    setStepEdits((current) => ({
-      ...current,
-      [stepId]: { ...current[stepId], [field]: value },
-    }));
-  }
+    const load = async () => {
+      try {
+        const response = await api.get('/notification', { skipAuthRedirect: true });
+        if (isMounted) {
+          setNotifications(response.data || []);
+        }
+      } catch {
+        // silent fail on polling errors
+      }
+    };
 
-  async function handleStepUpdate(step, field) {
-    const value = stepEdits[step.step_id]?.[field];
-    if (!value) return;
+    load();
+    // Poll every 60 seconds (60000ms) for new notifications
+    const interval = setInterval(load, 60000);
 
-    setUpdatingStep(`${step.step_id}-${field}`);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleMarkAsRead = async (notificationId, e) => {
+    e.stopPropagation();
     try {
-      const endpoint = field === 'newRole'
-        ? '/admin/update-request-step-target'
-        : '/admin/update-request-step-decision';
-      await api.post(endpoint, { stepId: step.step_id, [field]: value });
-      await fetchRequests();
-      setStepEdits((current) => ({ ...current, [step.step_id]: {} }));
-    } catch (requestErrorResponse) {
-      setRequestError(requestErrorResponse.response?.data?.error || 'Impossible de mettre à jour cette étape.');
+      await api.post(`/notification/${notificationId}/read`);
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.notification_id === notificationId ? { ...n, is_read: true } : n
+        )
+      );
+    } catch {
+      console.error('Failed to mark notification as read');
+    }
+  };
+
+  async function handleLogout() {
+    setLoggingOut(true);
+    try {
+      await api.post('/auth/logout');
     } finally {
-      setUpdatingStep(null);
+      sessionStorage.removeItem('role');
+      setOpenMenu(false);
+      setLoggingOut(false);
+      navigate('/', { replace: true });
     }
   }
 
-  if (loading) return <><Header /><div className="employee-details-page"><p className="employee-details-muted">Chargement...</p></div></>;
-  if (error || !detail) return <><Header /><div className="employee-details-page"><p className="employee-details-error">{error || 'Employé introuvable.'}</p><button type="button" className="employee-details-secondary" onClick={() => navigate('/admin')}>Retour aux employés</button></div></>;
+  const currentName = EmployeeName || fullName || '';
+  const currentRole = EmployeeRole || role || '';
+  const displayedRole = EmployeeRoleLabel || roleLabel || currentRole;
+  const canSeeSupervisorLinks = ['head', 'hr', 'admin'].includes(currentRole);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
-    <div className="employee-details-page">
-      <Header /><div className="employee-details-shell">
-        <header className="employee-details-header">
-          <div className="employee-details-identity">
-            <div className="employee-details-avatar">{initialsOf(detail.firstName, detail.lastName)}</div>
-            <div><h1>{detail.firstName} {detail.lastName}</h1><p className="employee-details-muted">{detail.roleLabel ?? ROLE_LABELS[detail.role] ?? detail.role}</p></div>
-          </div>
-          <button type="button" className="employee-details-secondary" onClick={() => navigate('/admin')}>Retour aux employés</button>
-        </header>
+    <header className="app-header">
+      <div className="container-fluid px-3 px-md-4 d-flex align-items-center justify-content-between py-2 position-relative" style={{ minHeight: '72px' }}>
+        <div className="d-flex align-items-center gap-2">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => {
+              setOpenMenu(!openMenu);
+              setOpenNotifications(false);
+            }}
+            aria-label="Menu"
+            aria-expanded={openMenu}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
 
-        <div className="employee-details-card employee-details-info">
-          <div><dt>Matricule</dt><dd>{detail.matricule ?? '—'}</dd></div>
-          <div><dt>Email</dt><dd>{detail.email}</dd></div>
-          <div><dt>Unité</dt><dd>{detail.unit?.name ?? '—'}</dd></div>
-          <div><dt>Type d'unité</dt><dd>{detail.unit?.type ?? '—'}</dd></div>
-          <div><dt>Date de recrutement</dt><dd>{formatDate(detail.recrutement_date)}</dd></div>
+          <div className={`logo-tile ${LOGO_SRC ? '' : 'logo-fallback'}`}>
+            {LOGO_SRC ? <img src={LOGO_SRC} alt="Logo" /> : 'GC'}
+          </div>
+
+          {openMenu && (
+            <nav
+              className="position-absolute menu-panel"
+              style={{ top: '100%', left: '0', marginTop: '4px', minWidth: '200px', zIndex: 1000 }}
+            >
+              <ul className="list-unstyled mb-0">
+                <li>
+                  <Link {...linkProps('/dashboard')} to="/dashboard" onClick={() => setOpenMenu(false)}>
+                    Tableau de bord
+                  </Link>
+                </li>
+                {canSeeSupervisorLinks && (
+                  <li>
+                    <Link {...linkProps('/unit-info')} to="/unit-info" onClick={() => setOpenMenu(false)}>
+                      Mon équipe
+                    </Link>
+                  </li>
+                )}
+                {canSeeSupervisorLinks && (
+                  <li>
+                    <Link {...linkProps('/approval-inbox')} to="/approval-inbox" onClick={() => setOpenMenu(false)}>
+                      Boîte de réception
+                    </Link>
+                  </li>
+                )}
+                {currentRole === 'admin' && (
+                  <li>
+                    <Link {...linkProps('/admin')} to="/admin" onClick={() => setOpenMenu(false)}>
+                      Administration
+                    </Link>
+                  </li>
+                )}
+                {currentRole === 'hr' && (
+                  <li>
+                    <Link className="menu-link" to="/leave-titles" onClick={() => setOpenMenu(false)}>
+                      Titres de congé
+                    </Link>
+                  </li>
+                )}
+              </ul>
+            </nav>
+          )}
         </div>
 
-        <ExerciseTable employeeId={employeeId} exercises={detail.exercises ?? []} onRefresh={fetchDetail} />
+        <div className="d-flex align-items-center gap-2 position-relative">
+          {/* Notification button with 60s polling */}
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Notifications"
+            aria-expanded={openNotifications}
+            onClick={() => {
+              setOpenNotifications(!openNotifications);
+              setOpenMenu(false);
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {unreadCount > 0 && (
+              <span className="badge-counter">{unreadCount > 99 ? '99+' : unreadCount}</span>
+            )}
+          </button>
 
-        <section className="employee-details-section">
-          <h2>Historique des demandes</h2>
-          {requestError && <p className="employee-details-feedback error">{requestError}</p>}
-          <div className="table-responsive">
-            <table className="table align-middle employee-details-table">
-              <thead><tr><th>ID</th><th>Type</th><th>Dates</th><th>Durée</th><th>Statut</th><th>Créée par</th><th className="text-end">Étapes</th></tr></thead>
-              <tbody>{requests.map((request) => {
-                const steps = request.steps ?? [];
-                const lastStep = steps[steps.length - 1];
-                const edit = stepEdits[lastStep?.step_id] ?? {};
-                const endDate = getEndDate(request.start_date, request.duration);
-                return <Fragment key={request.request_id}>
-                  <tr>
-                    <td>#{request.request_id}</td>
-                    <td>{LEAVE_TYPE_LABELS[request.leave_type] ?? request.leave_type}</td>
-                    <td>{formatDate(request.start_date)}{endDate ? ` → ${formatDate(endDate)}` : ''}</td>
-                    <td>{request.duration} j</td>
-                    <td><StatusBadge status={request.request_status} /></td>
-                    <td>
-                      {request.creator_first_name && request.creator_last_name
-                        ? `${request.creator_first_name} ${request.creator_last_name}${request.creator_role ? ` (${ROLE_LABELS[request.creator_role] ?? request.creator_role})` : ''}`
-                        : 'Employé'}
-                    </td>
-                    <td className="text-end"><button type="button" className="employee-details-secondary" onClick={() => setExpandedRequests((current) => ({ ...current, [request.request_id]: !current[request.request_id] }))}>{expandedRequests[request.request_id] ? 'Masquer' : 'Afficher'}</button></td>
-                  </tr>
-                  {expandedRequests[request.request_id] && <tr><td colSpan="7"><div className="employee-details-step-panel">
-                    {steps.length === 0 ? <p className="employee-details-muted mb-0">Aucune étape.</p> : steps.map((step, index) => <div className="employee-details-step-row" key={step.step_id}>
-                      <div><strong>Étape {step.step_order}</strong><div className="employee-details-muted">{step.target_first_name} {step.target_last_name} · {ROLE_LABELS[step.target_role] ?? step.target_role}</div></div>
-                      <span className="employee-details-muted">{step.decision || 'En attente'}</span>
-                      {index === steps.length - 1 && request.request_status === 'pending' && <div className="employee-details-step-editor">
-                        <select value={edit.newRole ?? ''} onChange={(event) => updateStepEdit(step.step_id, 'newRole', event.target.value)} aria-label="Nouveau rôle"><option value="">Nouveau rôle</option>{STEP_ROLE_OPTIONS.map((role) => <option key={role} value={role}>{ROLE_LABELS[role]}</option>)}</select>
-                        <button type="button" className="employee-details-secondary" disabled={!edit.newRole || updatingStep === `${step.step_id}-newRole`} onClick={() => handleStepUpdate(step, 'newRole')}>Changer le rôle</button>
-                        <select value={edit.decision ?? ''} onChange={(event) => updateStepEdit(step.step_id, 'decision', event.target.value)} aria-label="Nouvelle décision"><option value="">Nouvelle décision</option><option value="approved">Approuver</option><option value="rejected">Refuser</option></select>
-                        <button type="button" className="employee-details-primary" disabled={!edit.decision || updatingStep === `${step.step_id}-decision`} onClick={() => handleStepUpdate(step, 'decision')}>Enregistrer</button>
-                      </div>}
-                    </div>)}
-                  </div></td></tr>}
-                </Fragment>;
-              })}</tbody>
-            </table>
+          {openNotifications && (
+            <div className="position-absolute notif-panel p-0">
+              <div className="d-flex justify-content-between align-items-center notif-head">
+                <h6 className="mb-0 fw-bold">Notifications</h6>
+                {unreadCount > 0 && (
+                  <span className="unread-pill">{unreadCount} non lue(s)</span>
+                )}
+              </div>
+              <div className="notif-list">
+                {notifications.length === 0 ? (
+                  <div className="notif-empty">Aucune notification</div>
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.notification_id}
+                      className={`notif-item ${!notif.is_read ? 'unread' : ''}`}
+                    >
+                      <div className="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                          <p className="mb-1 text-dark">{notif.content}</p>
+                          <small className="notif-date">
+                            {new Date(notif.created_at).toLocaleString()}
+                          </small>
+                        </div>
+                        {!notif.is_read && (
+                          <button
+                            type="button"
+                            className="mark-read-btn"
+                            onClick={(e) => handleMarkAsRead(notif.notification_id, e)}
+                          >
+                            Lu
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="text-end d-none d-sm-block">
+            <p className="mb-0 user-name">{currentName}</p>
+            <p className="mb-0 user-role">{displayedRole}</p>
           </div>
-        </section>
+          <div className="text-end">
+            <button
+              type="button"
+              className="logout-btn"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              aria-label="Déconnexion"
+              title="Déconnexion"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M10 17l5-5-5-5" />
+                <path d="M15 12H3" />
+                <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
+              </svg>
+              <span className="logout-label">{loggingOut ? 'Déconnexion...' : 'Déconnexion'}</span>
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </header>
   );
 }
+export default Header;

@@ -17,7 +17,7 @@ function generateTokens(user) {
             id: user.id,
             firstName: user.prenom,
             lastName: user.nom,
-            role: mapRole(user.role),
+            role: mapRole(user.role, user.is_leave_responsible),
             roleLabel: getRoleLabel(user.role),
             unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null
         },
@@ -46,7 +46,7 @@ const authService = {
         }
 
         const { accessToken, refreshToken } = generateTokens(user);
-        return { accessToken, refreshToken, role: mapRole(user.role), roleLabel: getRoleLabel(user.role) };
+        return { accessToken, refreshToken, role: mapRole(user.role, user.is_leave_responsible), roleLabel: getRoleLabel(user.role) };
     },
 
     // Used by the refresh endpoint to rebuild a fresh access token payload

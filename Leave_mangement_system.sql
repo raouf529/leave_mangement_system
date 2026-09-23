@@ -31,7 +31,7 @@ CREATE TABLE `Employe` (
   `matricule` integer,
   `fonction` varchar(100), 
   `can_create_for_employee` bool NOT NULL DEFAULT false,
-  `role_for_leave_request_validation` ENUM ('directeur', 'chef_departement', 'chef_service', 'admin', 'employe') NOT NULL,
+  `role_leave_validation` ENUM ('directeur', 'chef_departement', 'chef_service', 'admin', 'employe') NOT NULL,
   `is_leave_responsible` bool NOT NULL DEFAULT false
 );
 
@@ -41,6 +41,7 @@ CREATE TABLE `Exercise` (
   `year` int NOT NULL,
   `balance` decimal(5,1) NOT NULL,
   `created_at` date Not NULL,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY `uniq_emp_year` (`Emp_id`, `year`)
 );
 
@@ -57,6 +58,7 @@ CREATE TABLE `Leave_request` (
   `url_justification` varchar(200),
   `request_status` varchar(200) NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `chk_exceptional_requires_reason`
     CHECK (
       (`leave_type` = 'exceptional' AND `reason_type` IS NOT NULL)
@@ -99,9 +101,10 @@ CREATE TABLE `Notification` (
   KEY `idx_notification_target` (`target_id`)
 );
 create TABLE `Logs` (
-  `log_id` INT AUTO_INCREMENT PRIMARY KEY,
+  `log_id` INT  NOT NULL AUTO_INCREMENT,
   `emp_id` INT,
   `action_type` VARCHAR(50) NOT NULL,
+  `details` VARCHAR(500) NOT NULL,
   `action_timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY Key (`log_id`)
 );

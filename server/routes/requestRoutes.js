@@ -3,7 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const requestController = require('../controllers/requestContoller');
-const { authenticateToken, authorizeRoles, authorizeRequestAccess, authorizeRequestStepAccess, authorizeRequestTargetAccess } = require('../middleware/authMiddleware');
+const { authenticateToken, authorizeRoles, authorizeRequestAccess, authorizeRequestStepAccess, authorizeRequestTargetAccess, authorizeTitleAccess } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
@@ -42,12 +42,10 @@ router.post('/', authenticateToken, uploadJustification, requestController.creat
 router.get('/steps/me', authenticateToken, requestController.getMyPendingSteps);
 router.get('/steps/:targetId', authenticateToken, authorizeRequestTargetAccess, requestController.getRequestSteps);
 router.patch('/step/:stepId', authenticateToken, authorizeRequestStepAccess, requestController.updateRequestStep);
-router.get('/:requestId/title', authenticateToken, authorizeRequestAccess, requestController.createTitle);
-router.get('/:requestId/title/document', authenticateToken, authorizeRequestAccess, requestController.downloadTitleDocument);
+router.get('/:requestId/title', authenticateToken, authorizeTitleAccess, requestController.createTitle);
+router.get('/:requestId/title/document', authenticateToken, authorizeTitleAccess, requestController.downloadTitleDocument);
 router.get('/:requestId/document', authenticateToken, authorizeRequestAccess, requestController.openJustificationDocument);
 router.get('/:requestId', authenticateToken, authorizeRequestAccess, requestController.getRequestDetails);
 router.patch('/:requestId/cancel', authenticateToken, authorizeRequestAccess, requestController.cancelRequest);
 
 module.exports = router;
-
-

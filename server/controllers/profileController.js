@@ -26,7 +26,7 @@ const profileController = {
     async getUnderemployees(req, res) {
         try {
             const userId = req.user.id;
-            const underemployees = await profileServices.getUnderemployees(userId);
+            const underemployees = await profileServices.getUnderemployees(userId, req.query);
             res.status(200).json(underemployees);
         }
         catch (error) {
@@ -36,7 +36,7 @@ const profileController = {
 
     async getAllEmployees(req, res) {
         try {
-            const employees = await profileServices.getAllEmployees();
+            const employees = await profileServices.getAllEmployees(req.query);
             res.status(200).json(employees);
         }
         catch (error) {

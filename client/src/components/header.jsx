@@ -134,10 +134,17 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
                     </Link>
                   </li>
                 )}
-                {(currentRole === 'hr' || currentRole === 'admin') && (
+                {['hr', 'drh', 'admin'].includes(currentRole) && (
                   <li>
                     <Link className="menu-link" to="/leave-titles" onClick={() => setOpenMenu(false)}>
                       Titres de congé
+                    </Link>
+                  </li>
+                )}
+                {['hr', 'drh'].includes(currentRole) && (
+                  <li>
+                    <Link className="menu-link" to="/add-employee" onClick={() => setOpenMenu(false)}>
+                      Ajouter un employé
                     </Link>
                   </li>
                 )}

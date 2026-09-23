@@ -1,22 +1,5 @@
 const authService = require('../services/authServices');
-
-function mapRole(role) {
-    if (role === 'drh') return 'hr';
-    if (['directeur', 'chef_departement', 'chef_service'].includes(role)) return 'head';
-    if (role === 'employe') return 'employee';
-    return role;
-}
-
-function getRoleLabel(role) {
-    const labels = {
-        directeur: 'Directeur',
-        chef_departement: 'Chef de département',
-        chef_service: 'Chef de service',
-        drh: 'Ressources humaines',
-        employe: 'Employé'
-    };
-    return labels[role] ?? role;
-}
+const { mapRole, getRoleLabel } = require('../utils/helpers');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -73,7 +56,7 @@ const authController = {
                 firstName: user.prenom,
                 lastName: user.nom,
                 email: user.email,
-                role: mapRole(user.role),
+                role: mapRole(user.role, user.is_leave_responsible),
                 roleLabel: getRoleLabel(user.role),
                 unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null,
                 canCreateForEmployee: Boolean(user.can_create_for_employee),

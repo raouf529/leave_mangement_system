@@ -7,6 +7,7 @@ import ApprovalInbox from './components/ApprovalInbox.jsx'
 import AdminDashboard from './components/AdminDashboard.jsx'
 import EmployeeDetails from './components/EmployeeDetails.jsx'
 import LeaveTitles from './components/LeaveTitles.jsx'
+import AddEmployee from './components/AddEmployee.jsx'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { loading, user, role } = useCurrentUser();
@@ -32,11 +33,12 @@ function App() {
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/unit-info" element={<ProtectedRoute allowedRoles={['head', 'hr', 'admin']}><UnitDashboard /></ProtectedRoute>} />
-        <Route path="/approval-inbox" element={<ProtectedRoute allowedRoles={['head', 'hr', 'admin']}><ApprovalInbox /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'hr']}><AdminDashboard /></ProtectedRoute>} />
-        <Route path="/admin/employees/:employeeId" element={<ProtectedRoute allowedRoles={['admin', 'hr']}><EmployeeDetails /></ProtectedRoute>} />
-        <Route path="/leave-titles" element={<ProtectedRoute allowedRoles={['admin', 'hr']}><LeaveTitles /></ProtectedRoute>} />
+        <Route path="/unit-info" element={<ProtectedRoute allowedRoles={['head', 'hr', 'drh', 'admin']}><UnitDashboard /></ProtectedRoute>} />
+        <Route path="/approval-inbox" element={<ProtectedRoute allowedRoles={['head', 'hr', 'drh', 'admin']}><ApprovalInbox /></ProtectedRoute>} />
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin/employees/:employeeId" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><EmployeeDetails /></ProtectedRoute>} />
+        <Route path="/leave-titles" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><LeaveTitles /></ProtectedRoute>} />
+        <Route path="/add-employee" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><AddEmployee /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

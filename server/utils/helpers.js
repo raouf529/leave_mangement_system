@@ -3,7 +3,8 @@
  */
 
 
-function mapRole(role) {
+function mapRole(role, isLeaveResponsible) {
+    if (isLeaveResponsible) return 'hr';
     if (role === 'admin') return 'admin';
     if (role === 'drh') return 'hr';
     if (['directeur', 'chef_departement', 'chef_service'].includes(role)) return 'head';

@@ -150,4 +150,21 @@ const authorizeProfileAccess = (req, res, next) => {
     }
 };
 
-module.exports = { authenticateToken, authorizeRoles, authorizeProfileAccess, authorizeRequestAccess, authorizeRequestStepAccess, authorizeRequestTargetAccess };
+// restrict titre de congé creation/download to HR only (is_leave_responsible, mapped to role 'hr')
+const authorizeTitleAccess = (req, res, next) => {
+    try {
+        if (!req.user) {
+            return res.status(401).json({ message: 'Vous devez être connecté pour effectuer cette action.' });
+        }
+
+        if (req.user.role !== 'hr') {
+            return res.status(403).json({ message: 'Seul le service RH peut créer ou télécharger un titre de congé.' });
+        }
+
+        return next();
+    } catch (error) {
+        res.status(500).json({ message: 'Error occurred while authorizing title access' });
+    }
+};
+
+module.exports = { authenticateToken, authorizeRoles, authorizeProfileAccess, authorizeRequestAccess, authorizeRequestStepAccess, authorizeRequestTargetAccess, authorizeTitleAccess };

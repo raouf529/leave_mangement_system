@@ -64,17 +64,23 @@ async function findStepTarget(employeeId, role) {
         chef_service: ['service_id', serviceId],
         chef_departement: ['departement_id', departementId],
         directeur: ['direction_id', directionId],
-        drh: ['direction_id', directionId],
     };
-    if (!units[role]) {
-        throw new Error(`Unknown role '${role}'`);
-    }
-    const [column, unitId] = units[role];
-    if (!unitId) {
-        throw new Error(`Employee '${employeeId}' has no unit for role '${role}'`);
+
+    let heads = [];
+    if (role === 'drh') {
+        // DRH is global, not bound to the requester's direction
+        [heads] = await pool.query(`SELECT id FROM Employe WHERE role = 'drh' LIMIT 1`);
+    } else {
+        if (!units[role]) {
+            throw new Error(`Unknown role '${role}'`);
+        }
+        const [column, unitId] = units[role];
+        if (!unitId) {
+            throw new Error(`Employee '${employeeId}' has no unit for role '${role}'`);
+        }
+        [heads] = await pool.query(`SELECT id FROM Employe WHERE role = ? AND ${column} = ?`, [role, unitId]);
     }
 
-    const [heads] = await pool.query(`SELECT id FROM Employe WHERE role = ? AND ${column} = ?`, [role, unitId]);
     if (heads.length === 0) {
         throw new Error(`No '${role}' found for employee '${employeeId}'`);
     }
@@ -83,8 +89,19 @@ async function findStepTarget(employeeId, role) {
 
 
 const adminServices = {
-    async getApprovedLeaveTitles(search = '') {
-        const term = String(search ?? '').trim();
+    async getApprovedLeaveTitles(options = {}) {
+        let term = '';
+        let page = null;
+        let limit = null;
+
+        if (typeof options === 'string') {
+            term = options.trim();
+        } else if (typeof options === 'object' && options !== null) {
+            term = String(options.search ?? '').trim();
+            page = options.page ? Math.max(1, parseInt(options.page, 10) || 1) : null;
+            limit = options.limit ? Math.max(1, parseInt(options.limit, 10) || 10) : null;
+        }
+
         const params = ['approved'];
         let searchClause = '';
 
@@ -98,6 +115,23 @@ const adminServices = {
             params.push(pattern, pattern, pattern);
         }
 
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM Leave_request lr
+            JOIN Employe e ON e.id = lr.Emp_id
+            WHERE lr.request_status = ? ${searchClause}
+        `;
+        const [countRows] = await pool.query(countQuery, params);
+        const total = countRows[0].total;
+
+        let limitSql = '';
+        const queryParams = [...params];
+        if (page !== null && limit !== null) {
+            const offset = (page - 1) * limit;
+            limitSql = `LIMIT ? OFFSET ?`;
+            queryParams.push(limit, offset);
+        }
+
         const [requests] = await pool.query(
             `SELECT lr.request_id, lr.leave_type, lr.start_date, lr.duration,
                     lr.request_status, lr.created_at,
@@ -105,30 +139,156 @@ const adminServices = {
              FROM Leave_request lr
              JOIN Employe e ON e.id = lr.Emp_id
              WHERE lr.request_status = ? ${searchClause}
-             ORDER BY lr.start_date DESC, lr.request_id DESC`,
-            params
+             ORDER BY lr.start_date DESC, lr.request_id DESC
+             ${limitSql}`,
+            queryParams
         );
 
-        return requests;
+        if (page === null || limit === null) {
+            return requests;
+        }
+
+        const totalPages = Math.ceil(total / limit) || 1;
+        return {
+            data: requests,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1
+            }
+        };
     },
 
-    async getLeaveRequests(employeeId) {
-        const whereClause = employeeId === undefined ? '' : 'WHERE lr.Emp_id = ?';
-        const queryParams = employeeId === undefined ? [] : [employeeId];
+    async getLeaveRequests(options = {}) {
+        let employeeId = undefined;
+        let page = null;
+        let limit = null;
+        let search = '';
+        let status = '';
+        let leaveType = '';
+        let exerciseYear = null;
+        let directionId = null;
+        let departementId = null;
+        let serviceId = null;
+        let sortBy = 'created_at';
+        let sortOrder = 'DESC';
+
+        if (typeof options === 'number' || typeof options === 'string') {
+            employeeId = Number(options);
+        } else if (typeof options === 'object' && options !== null) {
+            employeeId = options.employeeId !== undefined && options.employeeId !== null && options.employeeId !== '' ? Number(options.employeeId) : undefined;
+            page = options.page ? Math.max(1, parseInt(options.page, 10) || 1) : null;
+            limit = options.limit ? Math.max(1, parseInt(options.limit, 10) || 10) : null;
+            search = String(options.search ?? '').trim();
+            status = String(options.status ?? '').trim();
+            leaveType = String(options.leaveType ?? '').trim();
+            exerciseYear = options.exerciseYear ? Number(options.exerciseYear) : null;
+            directionId = options.directionId ? Number(options.directionId) : null;
+            departementId = options.departementId ? Number(options.departementId) : null;
+            serviceId = options.serviceId ? Number(options.serviceId) : null;
+            if (options.sortBy) sortBy = String(options.sortBy);
+            if (options.sortOrder) sortOrder = String(options.sortOrder).toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+        }
+
+        const whereClauses = [];
+        const params = [];
+
+        if (employeeId !== undefined && !isNaN(employeeId)) {
+            whereClauses.push('lr.Emp_id = ?');
+            params.push(employeeId);
+        }
+        if (status) {
+            whereClauses.push('lr.request_status = ?');
+            params.push(status);
+        }
+        if (leaveType) {
+            whereClauses.push('lr.leave_type = ?');
+            params.push(leaveType);
+        }
+        if (exerciseYear) {
+            whereClauses.push('lr.exercise = ?');
+            params.push(exerciseYear);
+        }
+        if (search) {
+            whereClauses.push(`(
+                CAST(e.matricule AS CHAR) LIKE ?
+                OR e.nom LIKE ?
+                OR e.prenom LIKE ?
+                OR CONCAT(e.nom, ' ', e.prenom) LIKE ?
+                OR CONCAT(e.prenom, ' ', e.nom) LIKE ?
+            )`);
+            const pattern = `%${search}%`;
+            params.push(pattern, pattern, pattern, pattern, pattern);
+        }
+        if (serviceId) {
+            whereClauses.push('e.service_id = ?');
+            params.push(serviceId);
+        } else if (departementId) {
+            whereClauses.push('COALESCE(e.departement_id, s.departement_id) = ?');
+            params.push(departementId);
+        } else if (directionId) {
+            whereClauses.push('COALESCE(e.direction_id, dep.direction_id, s.direction_id) = ?');
+            params.push(directionId);
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+        const allowedSortFields = {
+            created_at: 'lr.created_at',
+            start_date: 'lr.start_date',
+            duration: 'lr.duration',
+            request_id: 'lr.request_id',
+            status: 'lr.request_status'
+        };
+        const sortByField = allowedSortFields[sortBy] || 'lr.created_at';
+
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM Leave_request lr
+            JOIN Employe e ON e.id = lr.Emp_id
+            LEFT JOIN Service s ON s.id = e.service_id
+            LEFT JOIN Departement dep ON dep.id = COALESCE(e.departement_id, s.departement_id)
+            LEFT JOIN Direction d ON d.id = COALESCE(e.direction_id, dep.direction_id, s.direction_id)
+            ${whereSql}
+        `;
+        const [countRows] = await pool.query(countQuery, params);
+        const total = countRows[0].total;
+
+        let limitSql = '';
+        const queryParams = [...params];
+        if (page !== null && limit !== null) {
+            const offset = (page - 1) * limit;
+            limitSql = `LIMIT ? OFFSET ?`;
+            queryParams.push(limit, offset);
+        }
+
         const [requests] = await pool.query(
-                `SELECT lr.*, e.nom, e.prenom, e.email,
+            `SELECT lr.*, e.nom, e.prenom, e.email, e.matricule,
                     creator.nom AS creator_last_name,
                     creator.prenom AS creator_first_name,
                     creator.role AS creator_role
              FROM Leave_request lr
              JOIN Employe e ON e.id = lr.Emp_id
-                 LEFT JOIN Employe creator ON creator.id = lr.created_by
-             ${whereClause}
-             ORDER BY lr.created_at DESC, lr.request_id DESC`,
+             LEFT JOIN Service s ON s.id = e.service_id
+             LEFT JOIN Departement dep ON dep.id = COALESCE(e.departement_id, s.departement_id)
+             LEFT JOIN Direction d ON d.id = COALESCE(e.direction_id, dep.direction_id, s.direction_id)
+             LEFT JOIN Employe creator ON creator.id = lr.created_by
+             ${whereSql}
+             ORDER BY ${sortByField} ${sortOrder}, lr.request_id DESC
+             ${limitSql}`,
             queryParams
         );
 
-        if (requests.length === 0) return [];
+        if (requests.length === 0) {
+            if (page === null || limit === null) return [];
+            return {
+                data: [],
+                pagination: { total: 0, page, limit, totalPages: 1, hasNextPage: false, hasPrevPage: false }
+            };
+        }
 
         const requestIds = requests.map((request) => request.request_id);
         const [steps] = await pool.query(
@@ -139,8 +299,8 @@ const adminServices = {
              FROM Request_step rs
              JOIN Employe e ON e.id = rs.target_id
              WHERE rs.request_id IN (?)
-             ORDER BY rs.request_id, rs.step_order`
-            , [requestIds]
+             ORDER BY rs.request_id, rs.step_order`,
+            [requestIds]
         );
 
         const stepsByRequest = steps.reduce((result, step) => {
@@ -149,17 +309,34 @@ const adminServices = {
             return result;
         }, {});
 
-        return requests.map((request) => ({
+        const formattedRequests = requests.map((request) => ({
             ...request,
             steps: stepsByRequest[request.request_id] ?? []
         }));
+
+        if (page === null || limit === null) {
+            return formattedRequests;
+        }
+
+        const totalPages = Math.ceil(total / limit) || 1;
+        return {
+            data: formattedRequests,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1
+            }
+        };
     },
     async createExercise() {
         try {
             const now = new Date();
             const year = getExerciseYearForDate(now);
 
-            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe`);
+            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role != 'admin'`);
 
             for (const employee of employees) {
                 const [existingExercise] = await pool.query(
@@ -425,23 +602,54 @@ const adminServices = {
         }
     },
     async createMonthBalance(){
-        // in case problem of server don't allow monthly update of balance, add 2.5 for all employees
-        try {
-            const [employees] = await pool.query(`SELECT * FROM Employe`);
-            for(let employee of employees){
-                // add 2.5 to balance of this year exercise
-                year = getExerciseYearForDate(new Date());
-                const [exercise] = await pool.query(`SELECT * FROM Exercise WHERE Emp_id = ? AND exercise_year = ?`, [employee.id, year]);
-                if(exercise.length === 0){
-                    throw new Error(`Employee '${employee.id}' has no exercise`);
+    const results = { updated: [], skipped: [] };
+    try {
+        const [employees] = await pool.query(`SELECT * FROM Employe WHERE role != 'admin'`);
+        const year = getExerciseYearForDate(new Date());
+        const current_date = new Date();
+
+        for (const employee of employees) {
+            try {
+                const recrutement_date = new Date(employee.date_entree);
+
+                const [exercise] = await pool.query(
+                    `SELECT * FROM Exercise WHERE Emp_id = ? AND year = ?`,
+                    [employee.id, year]
+                );
+                if (exercise.length === 0) {
+                    results.skipped.push({ empId: employee.id, reason: 'no exercise found' });
+                    continue;
                 }
-                await pool.query(`UPDATE Exercise SET balance = ? WHERE exercise_id = ?`, [exercise[0].balance + 2.5, exercise[0].exercise_id]);
+
+                const isHiredThisMonth =
+                    recrutement_date.getMonth() === current_date.getMonth() &&
+                    recrutement_date.getFullYear() === current_date.getFullYear();
+
+                let increment;
+                if (isHiredThisMonth) {
+                    const attendanceDays =
+                        getMonthEnd(current_date.getFullYear(), current_date.getMonth()) -
+                        recrutement_date.getDate() + 1;
+                    increment = assignBalance(attendanceDays);
+                } else {
+                    increment = 2.5;
+                }
+
+                await pool.query(
+                    `UPDATE Exercise SET balance = balance + ? WHERE exercise_id = ?`,
+                    [increment, exercise[0].exercise_id]
+                );
+                results.updated.push({ empId: employee.id, increment });
+            } catch (innerError) {
+                results.skipped.push({ empId: employee.id, reason: innerError.message });
             }
-            return { success: true, message: 'Month balance created successfully' };
-        } catch (error) {
-            
         }
+
+        return { success: true, message: 'Month balance created successfully', ...results };
+    } catch (error) {
+        throw new Error('Error creating month balance: ' + error.message);
     }
+}
 };
 
 module.exports = adminServices;

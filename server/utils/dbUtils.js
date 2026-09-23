@@ -36,8 +36,27 @@ async function findExistingExercise(employeeId, exerciseYear, connection = null)
     return rows;
 }
 
+async function getUserById(userId, connection = null) {
+    const runner = connection || pool;
+    const [users] = await runner.query('SELECT * FROM Employe WHERE id = ?', [userId]);
+    if (users.length === 0) {
+        throw new Error('Employé introuvable.');
+    }
+    return users[0];
+}
+
+async function createLog(empId, action, details, connection = null) {
+    try {
+        const runner = connection || pool;
+        await runner.query('INSERT INTO Logs (emp_id, action_type, details, action_timestamp) VALUES (?, ?, ?, ?)', [empId, action, details, new Date().toISOString().slice(0, 19).replace('T', ' ')]);
+    } catch (error) {
+        console.error('Error creating log:', error.message);
+    }
+}
+
 module.exports = {
     createNotification,
     getEmployeeById,
-    findExistingExercise
+    findExistingExercise,
+    createLog
 };
