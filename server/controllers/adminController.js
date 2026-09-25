@@ -134,6 +134,38 @@ const adminController = {
             res.status(400).json({ error: error.message });
         }
     },
+    async assignCreateForOthers(req, res) {
+        try {
+            const { empId, permission } = req.body;
+            if (empId === undefined || permission === undefined) {
+                return res.status(400).json({ error: 'empId and permission are required' });
+            }
+            const result = await adminServices.assignCreateForOthers(Number(empId), permission);
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
+    async assignDRH(req, res) {
+        try {
+            const { empId } = req.body;
+            if (empId === undefined) {
+                return res.status(400).json({ error: 'empId is required' });
+            }
+            const result = await adminServices.assignDRH(Number(empId));
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
+    async getLogs(req, res) {
+        try {
+            const logs = await adminServices.getLogs();
+            res.status(200).json(logs);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
 };
 
 module.exports = adminController;

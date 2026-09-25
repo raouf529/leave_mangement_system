@@ -33,7 +33,7 @@ const profileService = {
             `SELECT lr.*,
                     creator.nom AS creator_last_name,
                     creator.prenom AS creator_first_name,
-                    creator.role AS creator_role
+                    creator.role_leave_validation AS creator_role
              FROM Leave_request lr
              LEFT JOIN Employe creator ON creator.id = lr.created_by
              WHERE lr.Emp_id = ?`,
@@ -105,8 +105,8 @@ const profileService = {
             firstName: employee.prenom,
             lastName: employee.nom,
             email: rows[0].email,
-            role: mapRole(employee.role, employee.is_leave_responsible),
-            roleLabel: getRoleLabel(employee.role),
+            role: mapRole(employee.role_leave_validation, employee.is_leave_responsible),
+            roleLabel: getRoleLabel(employee.role_leave_validation),
             recrutement_date: employee.date_entree,
             unit,
             exercises: exercises.map(ex => ({ exercise: ex.year, balance: ex.balance })),
@@ -183,7 +183,7 @@ const profileService = {
         }
 
         const user = rows[0];
-        if (!['head', 'hr'].includes(mapRole(user.role, user.is_leave_responsible))) {
+        if (!['head', 'hr'].includes(mapRole(user.role_leave_validation, user.is_leave_responsible))) {
             throw new Error('Seuls les employés avec le rôle "head" ou "hr" peuvent consulter leurs collaborateurs.');
         }
 
@@ -230,16 +230,16 @@ const profileService = {
 
         if (roleFilter) {
             if (roleFilter === 'hr') {
-                whereClauses.push('(e.is_leave_responsible = 1 OR e.role = ?)');
+                whereClauses.push('(e.is_leave_responsible = 1 OR e.role_leave_validation = ?)');
                 params.push('drh');
             } else if (roleFilter === 'head') {
-                whereClauses.push('e.role IN (?, ?, ?)');
+                whereClauses.push('e.role_leave_validation IN (?, ?, ?)');
                 params.push('directeur', 'chef_departement', 'chef_service');
             } else if (roleFilter === 'employee') {
-                whereClauses.push('e.role = ? AND e.is_leave_responsible = 0');
+                whereClauses.push('e.role_leave_validation = ? AND e.is_leave_responsible = 0');
                 params.push('employe');
             } else {
-                whereClauses.push('e.role = ?');
+                whereClauses.push('e.role_leave_validation = ?');
                 params.push(roleFilter);
             }
         }
@@ -283,8 +283,8 @@ const profileService = {
             firstName: emp.prenom,
             lastName: emp.nom,
             email: emp.email,
-            role: mapRole(emp.role, emp.is_leave_responsible),
-            roleLabel: getRoleLabel(emp.role),
+            role: mapRole(emp.role_leave_validation, emp.is_leave_responsible),
+            roleLabel: getRoleLabel(emp.role_leave_validation),
             unit: getEmployeeUnit(emp),
             canCreateForEmployee: Boolean(emp.can_create_for_employee)
         }));
@@ -324,7 +324,7 @@ const profileService = {
             email: 'e.email',
             matricule: 'e.matricule',
             date_entree: 'e.date_entree',
-            role: 'e.role'
+            role: 'e.role_leave_validation'
         };
         const sortByField = allowedSortFields[options.sortBy] || 'e.id';
         const sortOrder = String(options.sortOrder).toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
@@ -347,16 +347,16 @@ const profileService = {
 
         if (roleFilter) {
             if (roleFilter === 'hr') {
-                whereClauses.push('(e.is_leave_responsible = 1 OR e.role = ?)');
+                whereClauses.push('(e.is_leave_responsible = 1 OR e.role_leave_validation = ?)');
                 params.push('drh');
             } else if (roleFilter === 'head') {
-                whereClauses.push('e.role IN (?, ?, ?)');
+                whereClauses.push('e.role_leave_validation IN (?, ?, ?)');
                 params.push('directeur', 'chef_departement', 'chef_service');
             } else if (roleFilter === 'employee') {
-                whereClauses.push('e.role = ? AND e.is_leave_responsible = 0');
+                whereClauses.push('e.role_leave_validation = ? AND e.is_leave_responsible = 0');
                 params.push('employe');
             } else {
-                whereClauses.push('e.role = ?');
+                whereClauses.push('e.role_leave_validation = ?');
                 params.push(roleFilter);
             }
         }
@@ -412,8 +412,8 @@ const profileService = {
             firstName: emp.prenom,
             lastName: emp.nom,
             email: emp.email,
-            role: mapRole(emp.role, emp.is_leave_responsible),
-            roleLabel: getRoleLabel(emp.role),
+            role: mapRole(emp.role_leave_validation, emp.is_leave_responsible),
+            roleLabel: getRoleLabel(emp.role_leave_validation),
             unit: getEmployeeUnit(emp),
             canCreateForEmployee: Boolean(emp.can_create_for_employee)
         }));
@@ -434,7 +434,7 @@ const profileService = {
                 hasPrevPage: page > 1
             }
         };
-    }
+    },
 };
 
 module.exports = profileService;

@@ -1,237 +1,145 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import useCurrentUser from '../hooks/useCurrentUser';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from './api';
-import logo from '../assets/Nouveau logo catering .jpeg';
-import './header.css';
+import AdminHeader from './AdminDashboard'; // We can use the generic AdminHeader or custom one, wait I'll write an inline one or simple UI.
 
-const LOGO_SRC = logo;
-
-function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel }) {
-  const [openMenu, setOpenMenu] = useState(false);
-  const [openNotifications, setOpenNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [loggingOut, setLoggingOut] = useState(false);
+export default function EmployeeDetails() {
+  const { employeeId } = useParams();
   const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const linkProps = (path) => ({
-    className: `menu-link${pathname === path ? ' active' : ''}`,
-    'aria-current': pathname === path ? 'page' : undefined
-  });
-  const { fullName, role, roleLabel } = useCurrentUser();
+  const [employee, setEmployee] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const load = async () => {
+    async function fetchEmployee() {
       try {
-        const response = await api.get('/notification', { skipAuthRedirect: true });
-        if (isMounted) {
-          setNotifications(response.data || []);
-        }
-      } catch {
-        // silent fail on polling errors
+        const res = await api.get(`/profile/${employeeId}`);
+        setEmployee(res.data);
+      } catch (err) {
+        setError(err.response?.data?.error || err.message);
+      } finally {
+        setLoading(false);
       }
-    };
-
-    load();
-    // Poll every 60 seconds (60000ms) for new notifications
-    const interval = setInterval(load, 60000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const handleMarkAsRead = async (notificationId, e) => {
-    e.stopPropagation();
-    try {
-      await api.post(`/notification/${notificationId}/read`);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.notification_id === notificationId ? { ...n, is_read: true } : n
-        )
-      );
-    } catch {
-      console.error('Failed to mark notification as read');
     }
-  };
+    fetchEmployee();
+  }, [employeeId]);
 
-  async function handleLogout() {
-    setLoggingOut(true);
-    try {
-      await api.post('/auth/logout');
-    } finally {
-      sessionStorage.removeItem('role');
-      setOpenMenu(false);
-      setLoggingOut(false);
-      navigate('/', { replace: true });
-    }
+  if (loading) {
+    return <div className="p-5 text-center">Chargement des détails de l'employé...</div>;
   }
 
-  const currentName = EmployeeName || fullName || '';
-  const currentRole = EmployeeRole || role || '';
-  const displayedRole = EmployeeRoleLabel || roleLabel || currentRole;
-  const canSeeSupervisorLinks = ['head', 'hr', 'admin'].includes(currentRole);
+  if (error) {
+    return (
+      <div className="p-5 text-center">
+        <div className="alert alert-danger">{error}</div>
+        <button className="btn btn-primary mt-3" onClick={() => navigate('/admin')}>Retour</button>
+      </div>
+    );
+  }
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  if (!employee) {
+    return <div className="p-5 text-center">Employé non trouvé.</div>;
+  }
 
   return (
-    <header className="app-header">
-      <div className="container-fluid px-3 px-md-4 d-flex align-items-center justify-content-between py-2 position-relative" style={{ minHeight: '72px' }}>
-        <div className="d-flex align-items-center gap-2">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => {
-              setOpenMenu(!openMenu);
-              setOpenNotifications(false);
-            }}
-            aria-label="Menu"
-            aria-expanded={openMenu}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <line x1="3" y1="12" x2="21" y2="12" />
-              <line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
+    <div className="admin-dashboard">
+      <header className="admin-header py-3 px-4 shadow-sm mb-4 d-flex justify-content-between align-items-center">
+        <h1 className="h4 mb-0">Détails de l'employé</h1>
+        <button className="btn btn-outline-secondary" onClick={() => navigate('/admin')}>
+          Retour à l'administration
+        </button>
+      </header>
 
-          <div className={`logo-tile ${LOGO_SRC ? '' : 'logo-fallback'}`}>
-            {LOGO_SRC ? <img src={LOGO_SRC} alt="Logo" /> : 'GC'}
+      <main className="container pb-5">
+        <div className="row g-4">
+          {/* Personal Info */}
+          <div className="col-12 col-md-4">
+            <div className="card shadow-sm h-100">
+              <div className="card-body">
+                <h5 className="card-title text-primary mb-4">Informations Personnelles</h5>
+                <p><strong>Nom :</strong> {employee.lastName} {employee.firstName}</p>
+                <p><strong>Email :</strong> {employee.email}</p>
+                <p><strong>Matricule :</strong> {employee.matricule}</p>
+                <p><strong>Rôle :</strong> <span className="badge bg-secondary">{employee.roleLabel || employee.role}</span></p>
+                <p><strong>Unité :</strong> {employee.unit?.name || '—'} ({employee.unit?.type || 'N/A'})</p>
+                <p><strong>Date d'entrée :</strong> {new Date(employee.recrutement_date).toLocaleDateString()}</p>
+              </div>
+            </div>
           </div>
 
-          {openMenu && (
-            <nav
-              className="position-absolute menu-panel"
-              style={{ top: '100%', left: '0', marginTop: '4px', minWidth: '200px', zIndex: 1000 }}
-            >
-              <ul className="list-unstyled mb-0">
-                <li>
-                  <Link {...linkProps('/dashboard')} to="/dashboard" onClick={() => setOpenMenu(false)}>
-                    Tableau de bord
-                  </Link>
-                </li>
-                {canSeeSupervisorLinks && (
-                  <li>
-                    <Link {...linkProps('/unit-info')} to="/unit-info" onClick={() => setOpenMenu(false)}>
-                      Mon équipe
-                    </Link>
-                  </li>
-                )}
-                {canSeeSupervisorLinks && (
-                  <li>
-                    <Link {...linkProps('/approval-inbox')} to="/approval-inbox" onClick={() => setOpenMenu(false)}>
-                      Boîte de réception
-                    </Link>
-                  </li>
-                )}
-                {currentRole === 'admin' && (
-                  <li>
-                    <Link {...linkProps('/admin')} to="/admin" onClick={() => setOpenMenu(false)}>
-                      Administration
-                    </Link>
-                  </li>
-                )}
-                {currentRole === 'hr' && (
-                  <li>
-                    <Link className="menu-link" to="/leave-titles" onClick={() => setOpenMenu(false)}>
-                      Titres de congé
-                    </Link>
-                  </li>
-                )}
-              </ul>
-            </nav>
-          )}
-        </div>
-
-        <div className="d-flex align-items-center gap-2 position-relative">
-          {/* Notification button with 60s polling */}
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Notifications"
-            aria-expanded={openNotifications}
-            onClick={() => {
-              setOpenNotifications(!openNotifications);
-              setOpenMenu(false);
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            {unreadCount > 0 && (
-              <span className="badge-counter">{unreadCount > 99 ? '99+' : unreadCount}</span>
-            )}
-          </button>
-
-          {openNotifications && (
-            <div className="position-absolute notif-panel p-0">
-              <div className="d-flex justify-content-between align-items-center notif-head">
-                <h6 className="mb-0 fw-bold">Notifications</h6>
-                {unreadCount > 0 && (
-                  <span className="unread-pill">{unreadCount} non lue(s)</span>
-                )}
-              </div>
-              <div className="notif-list">
-                {notifications.length === 0 ? (
-                  <div className="notif-empty">Aucune notification</div>
+          {/* Exercises */}
+          <div className="col-12 col-md-8">
+            <div className="card shadow-sm h-100">
+              <div className="card-body">
+                <h5 className="card-title text-primary mb-4">Exercices & Soldes</h5>
+                {employee.exercises && employee.exercises.length > 0 ? (
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Année d'exercice</th>
+                        <th>Solde (Jours)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {employee.exercises.map((ex, idx) => (
+                        <tr key={idx}>
+                          <td>{ex.exercise}</td>
+                          <td><strong>{ex.balance}</strong></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 ) : (
-                  notifications.map((notif) => (
-                    <div
-                      key={notif.notification_id}
-                      className={`notif-item ${!notif.is_read ? 'unread' : ''}`}
-                    >
-                      <div className="d-flex justify-content-between align-items-start gap-2">
-                        <div>
-                          <p className="mb-1 text-dark">{notif.content}</p>
-                          <small className="notif-date">
-                            {new Date(notif.created_at).toLocaleString()}
-                          </small>
-                        </div>
-                        {!notif.is_read && (
-                          <button
-                            type="button"
-                            className="mark-read-btn"
-                            onClick={(e) => handleMarkAsRead(notif.notification_id, e)}
-                          >
-                            Lu
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                  <p className="text-muted">Aucun exercice trouvé.</p>
                 )}
               </div>
             </div>
-          )}
-
-          <div className="text-end d-none d-sm-block">
-            <p className="mb-0 user-name">{currentName}</p>
-            <p className="mb-0 user-role">{displayedRole}</p>
           </div>
-          <div className="text-end">
-            <button
-              type="button"
-              className="logout-btn"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              aria-label="Déconnexion"
-              title="Déconnexion"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M10 17l5-5-5-5" />
-                <path d="M15 12H3" />
-                <path d="M21 19V5a2 2 0 0 0-2-2h-6" />
-              </svg>
-              <span className="logout-label">{loggingOut ? 'Déconnexion...' : 'Déconnexion'}</span>
-            </button>
+
+          {/* Leave Requests */}
+          <div className="col-12">
+            <div className="card shadow-sm">
+              <div className="card-body">
+                <h5 className="card-title text-primary mb-4">Historique des demandes de congé</h5>
+                {employee.leaveRequests && employee.leaveRequests.length > 0 ? (
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle">
+                      <thead className="table-light">
+                        <tr>
+                          <th>ID</th>
+                          <th>Type</th>
+                          <th>Date de début</th>
+                          <th>Durée</th>
+                          <th>Statut</th>
+                          <th>Créé par</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {employee.leaveRequests.map((lr) => (
+                          <tr key={lr.id}>
+                            <td>#{lr.id}</td>
+                            <td>{lr.leaveType}</td>
+                            <td>{new Date(lr.startDate).toLocaleDateString()}</td>
+                            <td>{lr.duration} jours</td>
+                            <td>
+                              <span className={`badge bg-${lr.status === 'approved' ? 'success' : lr.status === 'rejected' ? 'danger' : 'warning'}`}>
+                                {lr.status}
+                              </span>
+                            </td>
+                            <td>{lr.createdByName || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-muted">Aucune demande de congé.</p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </main>
+    </div>
   );
 }
-export default Header;

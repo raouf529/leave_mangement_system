@@ -77,6 +77,7 @@ async function seedEmployees(conn, org) {
     { key: 'e9', first: 'Meriem',  last: 'Larbi',    email: 'meriem.larbi@corp.dz',    role: 'employe', level: 'service', unit: 'Section Dev',          date: '2026-09-10', fonction: 'Stagiaire Développeuse' },
     { key: 'e10', first: 'Amine', last: 'Ferhat',    email: 'amine.ferhat@corp.dz',    role: 'employe', level: 'departement', unit: 'Département RH',   date: '2020-04-12', fonction: 'Assistant RH' },
     { key: 'e11', first: 'Lydia', last: 'Mansouri',  email: 'lydia.mansouri@corp.dz',  role: 'employe', level: 'departement', unit: 'Département IT',   date: '2021-07-03', fonction: 'Technicienne IT' },
+    { key: 'dg', first: 'Karim', last: 'Benali', email: 'karim.benali@corp.dz', role: 'dg', level: 'none', unit: null, date: '2014-01-06', fonction: 'Directeur Général', roleValidation: 'dg' },
   ];
 
   for (const [index, p] of roster.entries()) {
@@ -84,16 +85,16 @@ async function seedEmployees(conn, org) {
     const departementId = p.level === 'departement' ? org.departements[p.unit] : null;
     const serviceId = p.level === 'service' ? org.services[p.unit] : null;
 
-    const roleValidation = p.roleValidation || (['directeur', 'chef_departement', 'chef_service', 'admin'].includes(p.role) ? p.role : 'employe');
+    const roleValidation = p.roleValidation || 'employe';
     const isLeaveResp = p.isLeaveResponsible ? 1 : 0;
     const fonction = p.fonction || null;
 
     // For service-based employees, keep service_id populated.
     // For department/direction employees, attach directly to the parent unit and leave service_id null.
     const [result] = await conn.query(
-      `INSERT INTO Employe (nom, nom_jeune_fille, prenom, email, password, date_entree, role, direction_id, departement_id, service_id, matricule, fonction, can_create_for_employee, role_leave_validation, is_leave_responsible)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [p.last, p.last, p.first, p.email, hashedPw, p.date, p.role, directionId, departementId, serviceId, 1001 + index, fonction, p.canCreate ? 1 : 0, roleValidation, isLeaveResp]
+      `INSERT INTO Employe (nom, nom_jeune_fille, prenom, email, password, date_entree, direction_id, departement_id, service_id, matricule, fonction, can_create_for_employee, role_leave_validation, is_leave_responsible)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [p.last, p.last, p.first, p.email, hashedPw, p.date, directionId, departementId, serviceId, 1001 + index, fonction, p.canCreate ? 1 : 0, roleValidation, isLeaveResp]
     );
     emp[p.key] = result.insertId;
   }

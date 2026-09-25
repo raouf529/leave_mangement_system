@@ -17,8 +17,8 @@ function generateTokens(user) {
             id: user.id,
             firstName: user.prenom,
             lastName: user.nom,
-            role: mapRole(user.role, user.is_leave_responsible),
-            roleLabel: getRoleLabel(user.role),
+            role: mapRole(user.role_leave_validation, user.is_leave_responsible),
+            roleLabel: getRoleLabel(user.role_leave_validation),
             unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null
         },
         process.env.JWT_SECRET,
@@ -46,7 +46,7 @@ const authService = {
         }
 
         const { accessToken, refreshToken } = generateTokens(user);
-        return { accessToken, refreshToken, role: mapRole(user.role, user.is_leave_responsible), roleLabel: getRoleLabel(user.role) };
+        return { accessToken, refreshToken, role: mapRole(user.role_leave_validation, user.is_leave_responsible), roleLabel: getRoleLabel(user.role_leave_validation) };
     },
 
     // Used by the refresh endpoint to rebuild a fresh access token payload

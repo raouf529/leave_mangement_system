@@ -69,7 +69,7 @@ async function findStepTarget(employeeId, role) {
     let heads = [];
     if (role === 'drh') {
         // DRH is global, not bound to the requester's direction
-        [heads] = await pool.query(`SELECT id FROM Employe WHERE role = 'drh' LIMIT 1`);
+        [heads] = await pool.query(`SELECT id FROM Employe WHERE role_leave_validation = 'drh' LIMIT 1`);
     } else {
         if (!units[role]) {
             throw new Error(`Unknown role '${role}'`);
@@ -269,7 +269,7 @@ const adminServices = {
             `SELECT lr.*, e.nom, e.prenom, e.email, e.matricule,
                     creator.nom AS creator_last_name,
                     creator.prenom AS creator_first_name,
-                    creator.role AS creator_role
+                    creator.role_leave_validation AS creator_role
              FROM Leave_request lr
              JOIN Employe e ON e.id = lr.Emp_id
              LEFT JOIN Service s ON s.id = e.service_id
@@ -295,7 +295,7 @@ const adminServices = {
             `SELECT rs.step_id, rs.request_id, rs.step_order, rs.target_id,
                     rs.decision, rs.comment, rs.decided_at,
                     e.nom AS target_last_name, e.prenom AS target_first_name,
-                    e.role AS target_role
+                    e.role_leave_validation AS target_role
              FROM Request_step rs
              JOIN Employe e ON e.id = rs.target_id
              WHERE rs.request_id IN (?)
@@ -336,7 +336,7 @@ const adminServices = {
             const now = new Date();
             const year = getExerciseYearForDate(now);
 
-            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role != 'admin'`);
+            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role_leave_validation != 'admin'`);
 
             for (const employee of employees) {
                 const [existingExercise] = await pool.query(
@@ -590,10 +590,10 @@ const adminServices = {
         // this function use to give/revoke permission of create for other employee for chefs
         try {
             const [employee] = await pool.query(`SELECT * FROM Employe WHERE id = ?`, [EmpId]);
-            if(employee[0].role==='employee' || employee[0].role==='admin' || employee[0].role==='drh'){
+            if(employee[0].role==='employe' || employee[0].role==='admin' || employee[0].role==='drh'){
                 throw new Error(`Employee '${EmpId}' is not authorized to create requests for others`);
             }
-            await pool.query(`UPDATE Employe SET create_other_request = ? WHERE id = ?`,
+            await pool.query(`UPDATE Employe SET can_create_for_employee = ? WHERE id = ?`,
                 [permission, EmpId]
             )
             return { success: true, message: 'Employee create other request permission updated successfully' };
@@ -601,10 +601,26 @@ const adminServices = {
             throw new Error('Error assigning create other request permission: ' + error.message);
         }
     },
+    async assignDRH(empId) {
+        try {
+            const [emp] = await pool.query('SELECT role_leave_validation FROM Employe WHERE id = ?', [empId]);
+            if (emp.length === 0) {
+                throw new Error('Employee not found');
+            }
+            if (emp[0].role === 'admin') {
+                throw new Error('Admin cannot be assigned as DRH');
+            }
+            await pool.query("UPDATE Employe SET role_leave_validation = 'employe' WHERE role_leave_validation = 'drh'");
+            await pool.query("UPDATE Employe SET role_leave_validation = 'drh' WHERE id = ?", [empId]);
+            return { success: true, message: 'DRH assigned successfully' };
+        } catch (error) {
+            throw new Error('Error assigning DRH: ' + error.message);
+        }
+    },
     async createMonthBalance(){
     const results = { updated: [], skipped: [] };
     try {
-        const [employees] = await pool.query(`SELECT * FROM Employe WHERE role != 'admin'`);
+        const [employees] = await pool.query(`SELECT * FROM Employe WHERE role_leave_validation != 'admin'`);
         const year = getExerciseYearForDate(new Date());
         const current_date = new Date();
 
@@ -648,6 +664,14 @@ const adminServices = {
         return { success: true, message: 'Month balance created successfully', ...results };
     } catch (error) {
         throw new Error('Error creating month balance: ' + error.message);
+    }
+},
+async getLogs(){
+    try {
+        const [logs] = await pool.query(`SELECT * FROM Logs ORDER BY created_at DESC`);
+        return logs;
+    } catch (error) {
+        throw new Error('Error getting logs: ' + error.message);
     }
 }
 };

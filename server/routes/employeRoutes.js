@@ -9,4 +9,6 @@ router.get('/departements', authenticateToken, employeController.getAllDeparteme
 router.get('/directions', authenticateToken, employeController.getAllDirections);
 
 router.post('/create', authenticateToken, authorizeRoles('drh'), employeController.createEmployee);
+router.post('/change-role', authenticateToken, authorizeRoles('drh', 'admin'), employeController.changeRole);
+
 module.exports = router;

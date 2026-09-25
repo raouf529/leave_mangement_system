@@ -211,7 +211,7 @@ async function getDepartement(unitId, conn = pool) {
 async function getEmployeeUnit(employeeId, conn = pool) {
     // helper function to get employee's unit info
     const [rows] = await conn.query(
-        `SELECT e.id, e.role, e.direction_id, e.departement_id, e.service_id,
+        `SELECT e.id, e.role_leave_validation, e.direction_id, e.departement_id, e.service_id,
             COALESCE(e.direction_id, dep.direction_id, s.direction_id) AS resolved_direction_id,
             COALESCE(e.departement_id, s.departement_id) AS resolved_departement_id,
             d.nom AS direction_name, dep.nom AS departement_name, s.nom AS service_name
@@ -402,9 +402,43 @@ async function forwardRequestToNextStep(requestId, currentlocation_id, decision,
         );
     }
     else if (currentEmp.role_leave_validation === 'directeur') {
-        // Annual and exceptional leave are fully approved once the directeur signs off.
-        // Advance leave still needs a final check by whoever is responsible for leave (is_leave_responsible),
-        // since that role is independent of role_leave_validation (no 'drh' value there).
+        const [requestRows] = await conn.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
+        if (requestRows.length === 0) {
+            throw new Error('Demande introuvable.');
+        }
+        const request = requestRows[0];
+
+        if (Number(request.Emp_id) === Number(currentEmp.id)) {
+            // A directeur can't approve their own leave request: it goes up to the DG instead.
+            const [dgRows] = await conn.query('SELECT * FROM Employe WHERE role_leave_validation = ?', ['dg']);
+            if (dgRows.length === 0) {
+                throw new Error('Aucun DG trouvé pour valider la demande du directeur.');
+            }
+            targetUnit = dgRows[0];
+            await conn.query(
+                'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
+            );
+        } else if (request.leave_type === 'advance') {
+            // Annual and exceptional leave are fully approved once the directeur signs off.
+            // Advance leave still needs a final check by whoever is responsible for leave (is_leave_responsible),
+            // since that role is independent of role_leave_validation (no 'drh' value there).
+            const [hrRows] = await conn.query('SELECT * FROM Employe WHERE is_leave_responsible = ?', [true]);
+            if (hrRows.length === 0) {
+                throw new Error(`Aucun responsable RH trouvé pour valider ce congé par anticipation.`);
+            }
+            targetUnit = hrRows[0];
+            await conn.query(
+                'INSERT INTO Request_step (request_id, step_order, target_id, decision, comment, decided_at) VALUES (?, ?, ?, ?, ?, ?)',
+                [requestId, nextStepOrder, targetUnit.id, decision, comment, null]
+            );
+        } else {
+            // No further step: the caller treats a null return as final approval.
+            targetUnit = null;
+        }
+    }
+    else if (currentEmp.role_leave_validation === 'dg') {
+        // The DG approving a directeur's leave request: same finalize-or-HR pattern as the directeur step.
         const [requestRows] = await conn.query('SELECT * FROM Leave_request WHERE request_id = ?', [requestId]);
         if (requestRows.length === 0) {
             throw new Error('Demande introuvable.');
@@ -538,7 +572,7 @@ const requestService = {
                          OR (? = 'chef_departement' AND COALESCE(e.departement_id, s.departement_id) = ?)
                          OR (? = 'directeur' AND COALESCE(e.direction_id, dep.direction_id, s.direction_id) = ?)
                        )`,
-                    [requestedEmployeeId, creator.role, creator.service_id, creator.role, creator.departement_id, creator.role, creator.direction_id]
+                    [requestedEmployeeId, creator.role_leave_validation, creator.service_id, creator.role_leave_validation, creator.departement_id, creator.role_leave_validation, creator.direction_id]
                 );
                 if (targetScopeRows.length === 0) {
                     throw new Error('Cet employé ne relève pas de votre périmètre.');
@@ -657,7 +691,7 @@ const requestService = {
         return steps;
     },
     async getPendingStepsForUser(userId) {
-        const [userRows] = await pool.query('SELECT id, role FROM Employe WHERE id = ?', [userId]);
+        const [userRows] = await pool.query('SELECT id, role_leave_validation FROM Employe WHERE id = ?', [userId]);
         if (userRows.length === 0) {
             throw new Error('Employé introuvable.');
         }
@@ -667,15 +701,15 @@ const requestService = {
                             lr.reason_type, lr.request_status,
             e.nom, e.prenom, e.email,
             creator.nom AS creator_last_name, creator.prenom AS creator_first_name,
-            creator.role AS creator_role,
-            target.nom AS target_nom, target.prenom AS target_prenom, target.role AS target_role
+            creator.role_leave_validation AS creator_role,
+            target.nom AS target_nom, target.prenom AS target_prenom, target.role_leave_validation AS target_role
        FROM Request_step rs
        JOIN Leave_request lr ON lr.request_id = rs.request_id
         JOIN Employe e ON e.id = lr.Emp_id
        LEFT JOIN Employe creator ON creator.id = lr.created_by
        JOIN Employe target ON target.id = rs.target_id
        WHERE (rs.decision IS NULL OR rs.decision = '') AND lr.request_status = 'pending'
-         AND (rs.target_id = ? OR target.role IN ('chef_service', 'chef_departement'))`,
+         AND (rs.target_id = ? OR target.role_leave_validation IN ('chef_service', 'chef_departement'))`,
             [userId]
         );
 

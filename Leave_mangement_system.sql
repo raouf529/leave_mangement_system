@@ -20,18 +20,17 @@ CREATE TABLE `Employe` (
   `id` integer PRIMARY KEY AUTO_INCREMENT,
   `nom` varchar(100) NOT NULL,
   `nom_jeune_fille` varchar(100) NOT NULL,
-  `prenom` varchar(150) NOT NULL UNIQUE,
+  `prenom` varchar(150) NOT NULL,
   `password` varchar(200) NOT NULL,
   `email` varchar(200) NOT NULL UNIQUE,
   `date_entree` date NOT NULL,
-  `role` ENUM ('admin', 'directeur', 'chef_departement', 'chef_service', 'drh', 'employe') NOT NULL,
   `direction_id` integer,
   `departement_id` integer,
   `service_id` integer,
   `matricule` integer,
   `fonction` varchar(100), 
   `can_create_for_employee` bool NOT NULL DEFAULT false,
-  `role_leave_validation` ENUM ('directeur', 'chef_departement', 'chef_service', 'admin', 'employe') NOT NULL,
+  `role_leave_validation` ENUM ('dg', 'directeur', 'chef_departement', 'chef_service', 'admin', 'employe') NOT NULL,
   `is_leave_responsible` bool NOT NULL DEFAULT false
 );
 

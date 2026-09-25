@@ -149,6 +149,44 @@
   white-space: nowrap;
 }
 
+/* Replaces the old progress-bar health indicator: a small status chip that
+   reads its meaning directly instead of relying on a bar length/color to be
+   decoded, and doesn't add another competing hue to the page. */
+.balance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.balance-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.balance-chip-high {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.balance-chip-medium {
+  background: var(--amber-soft);
+  color: var(--accent-amber);
+}
+
+.balance-chip-low {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -184,6 +222,17 @@
   color: #fff;
 }
 
+/* The main "Demander un congé" CTA next to the page title, now visible on
+   every breakpoint (it used to be d-lg-none, so on desktop the only way to
+   find it was the sidebar). */
+.leave-dashboard .btn-request-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(27, 36, 48, 0.08);
+}
+
 .leave-dashboard .info-btn,
 .leave-dashboard .cancel-btn {
   border: 1px solid var(--border);
@@ -201,6 +250,15 @@
   background: var(--primary-soft);
   border-color: var(--primary-soft);
   color: var(--primary);
+}
+
+.leave-dashboard .chevron-btn {
+  width: 32px;
+  height: 31px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .leave-dashboard .cancel-btn {
@@ -243,12 +301,16 @@
 
 .history-table {
   --bs-table-bg: transparent;
+  table-layout: fixed;
+  min-width: 680px;
   font-size: 0.93rem;
 }
 
 .history-table thead th {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--muted);
   padding: 0.75rem 1rem;
   background: var(--canvas);
@@ -259,6 +321,36 @@
 .history-table td {
   padding: 0.85rem 1rem;
   border-color: var(--border);
+}
+
+.history-table tbody tr:not(.detail-row):hover > td {
+  background: var(--neutral-soft);
+}
+
+.cell-sub {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.duration-pill {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 8px;
+  background: var(--neutral-soft);
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.count-pill {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  vertical-align: middle;
 }
 
 .history-table tbody tr:last-child > td {

@@ -70,6 +70,17 @@ function isCurrentExercise(exerciseLabel) {
   return today >= start && today <= end;
 }
 
+// Fallback when the API doesn't send the exercise's initial entitlement
+const DEFAULT_EXERCISE_DAYS = 30;
+
+function getBalanceHealth(balance, total) {
+  const safeTotal = total > 0 ? total : DEFAULT_EXERCISE_DAYS;
+  const pct = Math.max(0, Math.min(100, (Number(balance) / safeTotal) * 100));
+  const level = pct >= 60 ? 'high' : pct >= 30 ? 'medium' : 'low';
+  const LABELS = { high: 'Solde confortable', medium: 'Solde moyen', low: 'Solde bas' };
+  return { pct, level, label: LABELS[level], total: safeTotal };
+}
+
 function getEndDate(startDate, duration) {
   if (!startDate) return null;
   const d = new Date(startDate);
@@ -181,14 +192,10 @@ function Dashboard() {
     return timeA - timeB;
   });
 
-  // Last request is the newest request based on created_at
-  const lastRequest = rawRequests.length > 0
-    ? [...rawRequests].sort((a, b) => {
-        const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
-        const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
-        return timeB - timeA;
-      })[0]
-    : null;
+  // The hero card only ever needs to surface a request that's still awaiting a
+  // decision — anything resolved (approved/rejected/cancelled) already lives in
+  // the history table below, so showing it twice adds nothing.
+  const pendingRequest = rawRequests.find((lr) => lr.status === 'pending') ?? null;
 
   const filteredLeaveRequests = useMemo(() => {
     return leaveRequests.filter((lr) => {
@@ -218,17 +225,21 @@ function Dashboard() {
     });
   }, [leaveRequests, filterStatus, filterActive, filterStartDate]);
 
-  const lastRequestEndDate = lastRequest ? getEndDate(lastRequest.startDate, lastRequest.duration) : null;
-  const lastRequestStepLabel = getCurrentStepLabel(lastRequest);
+  const pendingRequestEndDate = pendingRequest ? getEndDate(pendingRequest.startDate, pendingRequest.duration) : null;
+  const pendingRequestStepLabel = getCurrentStepLabel(pendingRequest);
   return (
     <div className="leave-dashboard">
       <Header
         EmployeeName={employeeInfo ? `${employeeInfo.firstName} ${employeeInfo.lastName}` : ''}
         EmployeeRole={employeeInfo ? employeeInfo.role : ''}
         EmployeeRoleLabel={employeeInfo ? employeeInfo.roleLabel : ''}
+        onRequestLeave={() => setShowRequestModal(true)}
       />
 
       <main className="container py-4">
+        {/* Primary CTA lives right beside the page title on every breakpoint now —
+            previously it only appeared here on mobile (d-lg-none) and was otherwise
+            buried in the sidebar, which made it easy to miss. */}
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
           <div className="d-flex flex-wrap align-items-baseline gap-2 gap-md-3">
             <h1 className="page-title mb-0">
@@ -237,9 +248,13 @@ function Dashboard() {
             <span className="hero-label">Espace employé</span>
           </div>
           <button
-            className="btn btn-brand px-4"
+            className="btn btn-brand btn-request-main px-4"
             onClick={() => setShowRequestModal(true)}
           >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
             Demander un congé
           </button>
         </div>
@@ -257,70 +272,61 @@ function Dashboard() {
           </div>
         ) : (
           <>
-            <section
-              className="section-card mb-4 last-request-card"
-              style={{ '--status-color': lastRequest ? (STATUS_STYLES[lastRequest.status]?.fg ?? 'var(--border)') : 'var(--border)' }}
-            >
-              <p className="last-request-label mb-2">Dernière demande</p>
-              {!lastRequest ? (
-                <p className="empty-state mb-0">Aucune demande de congé pour le moment.</p>
-              ) : (
-                <>
-                  <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
-                    <h2 className="section-title mb-0">{LEAVE_TYPE_LABELS[lastRequest.leaveType] ?? lastRequest.leaveType}</h2>
-                    <StatusBadge status={lastRequest.status} />
-                  </div>
+            {/* Only rendered when a request is actually awaiting a decision — an
+                approved/rejected/cancelled request is resolved and already shows
+                in the history table, so there's nothing useful to repeat here,
+                and no "no pending request" placeholder is shown either. */}
+            {pendingRequest && (
+              <section
+                className="section-card mb-4 last-request-card"
+                style={{ '--status-color': STATUS_STYLES.pending.fg }}
+              >
+                <p className="last-request-label mb-2">Demande en cours</p>
+                <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                  <h2 className="section-title mb-0">{LEAVE_TYPE_LABELS[pendingRequest.leaveType] ?? pendingRequest.leaveType}</h2>
+                  <StatusBadge status={pendingRequest.status} />
+                </div>
 
-                  <div className="row g-3 mb-3">
-                    <div className="col-12 col-sm-6 col-md-4">
-                      <p className="hero-label mb-1">Dates</p>
-                      <p className="fw-medium mb-0">
-                        {formatDate(lastRequest.startDate)}
-                        {lastRequestEndDate ? ` → ${formatDate(lastRequestEndDate)}` : ''}
-                      </p>
-                    </div>
-                    <div className="col-12 col-sm-6 col-md-4">
-                      <p className="hero-label mb-1">Durée</p>
-                      <p className="fw-medium mb-0">{lastRequest.duration} j</p>
-                    </div>
-                    {lastRequest.status === 'pending' && lastRequestStepLabel && (
-                      <div className="col-12 col-md-4">
-                        <p className="hero-label mb-1">Étape actuelle</p>
-                        <p className="fw-medium mb-0">{lastRequestStepLabel}</p>
-                      </div>
-                    )}
+                <div className="row g-3 mb-3">
+                  <div className="col-12 col-sm-6 col-md-4">
+                    <p className="hero-label mb-1">Dates</p>
+                    <p className="fw-medium mb-0">
+                      {formatDate(pendingRequest.startDate)}
+                      {pendingRequestEndDate ? ` → ${formatDate(pendingRequestEndDate)}` : ''}
+                    </p>
                   </div>
-
-                  {lastRequest.status === 'rejected' && (
-                    <div className="reject-note mb-3">
-                      {lastRequest.rejectedByName && (
-                        <div><strong>Refusée par :</strong> {lastRequest.rejectedByName}</div>
-                      )}
-                      <strong>Motif du refus :</strong> {lastRequest.rejectionReason || 'Aucune raison détaillée.'}
+                  <div className="col-12 col-sm-6 col-md-4">
+                    <p className="hero-label mb-1">Durée</p>
+                    <p className="fw-medium mb-0">{pendingRequest.duration} j</p>
+                  </div>
+                  {pendingRequestStepLabel && (
+                    <div className="col-12 col-md-4">
+                      <p className="hero-label mb-1">En attente de</p>
+                      <p className="fw-medium mb-0">{pendingRequestStepLabel}</p>
                     </div>
                   )}
+                </div>
 
-                  {['annual', 'advance'].includes(lastRequest.leaveType) && lastRequest.allocations?.length > 0 && (
-                    <div className="mb-3">
-                      <p className="hero-label mb-2">Répartition</p>
-                      <div className="split-list">
-                        {lastRequest.allocations.map((a, i) => (
-                          <div key={i} className="mb-1">Exercice {a.year} : {a.daysAllocated} j</div>
-                        ))}
-                      </div>
+                {['annual', 'advance'].includes(pendingRequest.leaveType) && pendingRequest.allocations?.length > 0 && (
+                  <div className="mb-3">
+                    <p className="hero-label mb-2">Répartition</p>
+                    <div className="split-list">
+                      {pendingRequest.allocations.map((a, i) => (
+                        <div key={i} className="mb-1">Exercice {a.year} : {a.daysAllocated} j</div>
+                      ))}
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  <button
-                    className="btn btn-sm cancel-btn"
-                    disabled={cancelingId === lastRequest.id || lastRequest.status === 'cancelled' || lastRequest.status === 'rejected'}
-                    onClick={() => promptCancel(lastRequest)}
-                  >
-                    {cancelingId === lastRequest.id ? 'Annulation...' : 'Annuler cette demande'}
-                  </button>
-                </>
-              )}
-            </section>
+                <button
+                  className="btn btn-sm cancel-btn"
+                  disabled={cancelingId === pendingRequest.id}
+                  onClick={() => promptCancel(pendingRequest)}
+                >
+                  {cancelingId === pendingRequest.id ? 'Annulation...' : 'Annuler cette demande'}
+                </button>
+              </section>
+            )}
 
             <section className="section-card mb-4">
               <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
@@ -341,6 +347,10 @@ function Dashboard() {
                   {activeExercises.map((exercise, index) => {
                     const range = getExerciseRange(exercise.exercise);
                     const current = isCurrentExercise(exercise.exercise);
+                    const health = getBalanceHealth(
+                      exercise.balance,
+                      Number(exercise.total ?? exercise.allocated ?? exercise.initialBalance)
+                    );
                     return (
                       <div className="col-12 col-sm-6 col-md-4" key={index}>
                         <div className={`exercise-card h-100${current ? ' current' : ''}`}>
@@ -353,8 +363,13 @@ function Dashboard() {
                           {range && <p className="muted-note mb-0 mt-1">Du {range.from} au {range.to}</p>}
                           <p className="exercise-balance mb-0">
                             {exercise.balance}{' '}
-                            <span className="exercise-unit">jours</span>
+                            <span className="exercise-unit">/ {health.total} jours</span>
                           </p>
+                          {!current && (
+                            <span className={`balance-chip balance-chip-${health.level}`}>
+                              {health.label}
+                            </span>
+                          )}
                         </div>
                       </div>
                     );
@@ -365,7 +380,10 @@ function Dashboard() {
 
             <section className="section-card">
               <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-                <h2 className="section-title mb-0">Historique des demandes</h2>
+                <h2 className="section-title mb-0">
+                  Historique des demandes
+                  <span className="count-pill">{filteredLeaveRequests.length}</span>
+                </h2>
                 <div className="d-flex flex-wrap gap-2 align-items-center">
                   <div className="form-check form-switch me-2 d-flex align-items-center gap-2" style={{ margin: 0 }}>
                     <input className="form-check-input mt-0" type="checkbox" role="switch" id="activeLeaveSwitch" checked={filterActive} onChange={(e) => setFilterActive(e.target.checked)} />
@@ -389,11 +407,11 @@ function Dashboard() {
                   <table className="history-table table align-middle mb-0">
                     <thead>
                       <tr>
-                        <th className="fw-medium">Type</th>
-                        <th className="fw-medium">Dates</th>
-                        <th className="fw-medium">Durée</th>
-                        <th className="fw-medium">Statut</th>
-                        <th className="fw-medium">Actions</th>
+                        <th style={{ width: '26%' }}>Type</th>
+                        <th style={{ width: '18%' }}>Période</th>
+                        <th style={{ width: '10%' }}>Durée</th>
+                        <th style={{ width: '26%' }}>Statut</th>
+                        <th className="text-end" style={{ width: '20%' }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -410,21 +428,34 @@ function Dashboard() {
                         return (
                           <Fragment key={lr.id}>
                             <tr>
-                              <td className="fw-medium">{LEAVE_TYPE_LABELS[lr.leaveType] ?? lr.leaveType}</td>
                               <td>
-                                {formatDate(lr.startDate)}
-                                {endDate ? ` → ${formatDate(endDate)}` : ''}
+                                <div className="fw-medium">{LEAVE_TYPE_LABELS[lr.leaveType] ?? lr.leaveType}</div>
+                                {lr.created_at && <div className="cell-sub">Demandée le {formatDate(lr.created_at)}</div>}
                               </td>
-                              <td>{lr.duration} j</td>
-                              <td><StatusBadge status={lr.status} /></td>
+                              <td className="text-nowrap">
+                                <div className="fw-medium">{formatDate(lr.startDate)}</div>
+                                {endDate && <div className="cell-sub">→ {formatDate(endDate)}</div>}
+                              </td>
+                              <td><span className="duration-pill">{lr.duration} j</span></td>
                               <td>
-                                <div className="d-flex flex-wrap gap-2">
+                                <StatusBadge status={lr.status} />
+                                {lr.status === 'pending' && currentStepLabel && (
+                                  <div className="cell-sub mt-1">Chez : {currentStepLabel}</div>
+                                )}
+                              </td>
+                              <td>
+                                <div className="d-flex flex-wrap justify-content-end gap-2">
                                   {hasDetails && (
                                     <button
-                                      className="btn btn-sm info-btn"
+                                      className="btn btn-sm info-btn chevron-btn"
                                       onClick={() => toggleDetails(lr.id)}
+                                      aria-expanded={isExpanded}
+                                      aria-label={isExpanded ? 'Masquer les détails' : 'Plus d\'infos'}
+                                      title={isExpanded ? 'Masquer les détails' : 'Plus d\'infos'}
                                     >
-                                      {isExpanded ? 'Masquer' : 'Plus d\'infos'}
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms ease' }} aria-hidden="true">
+                                        <polyline points="6 9 12 15 18 9" />
+                                      </svg>
                                     </button>
                                   )}
                                   <button

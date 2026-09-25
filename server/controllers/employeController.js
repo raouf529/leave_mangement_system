@@ -38,6 +38,19 @@ const employeController = {
             console.error('Error creating employee:', error);
             res.status(500).json({ error: 'Failed to create employee' });
         }
+    },
+    async changeRole(req, res){
+        try {
+            const { empId, newRoleValidation } = req.body;
+            if (!empId || !newRoleValidation) {
+                return res.status(400).json({ error: 'empId and newRoleValidation are required' });
+            }
+            await employServices.changeRole(empId, newRoleValidation);
+            res.json({ success: true, message: 'Role updated successfully' });
+        } catch (error) {
+            console.error('Error changing role:', error);
+            res.status(500).json({ error: 'Failed to change role' });
+        }
     }
 }
 

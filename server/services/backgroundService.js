@@ -36,7 +36,7 @@ const backgroundService = {
     async createNewExercise() {
         try {
             const { currentExerciseYear, nextExerciseYear } = getExerciseWindowForDate(new Date());
-            const [employees] = await pool.query(`SELECT id FROM Employe WHERE role != 'admin'`);
+            const [employees] = await pool.query(`SELECT id FROM Employe WHERE role_leave_validation != 'admin'`);
 
             for (const employee of employees) {
                 for (const exerciseYear of [currentExerciseYear, nextExerciseYear]) {
@@ -72,7 +72,7 @@ const backgroundService = {
     // Adds 2.5 balance for each employee
     async updateExerciseBalances() {
         try {
-            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role != 'admin'`);
+            const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role_leave_validation != 'admin'`);
             const now = new Date();
             const exerciseYear = getExerciseYearForDate(now);
 

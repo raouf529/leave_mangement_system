@@ -32,13 +32,6 @@ const ROLE_LABELS = {
   drh: 'DRH'
 };
 
-const STATUS_STYLES = {
-  pending: { bg: 'var(--amber-soft)', fg: 'var(--accent-amber)' },
-  approved: { bg: 'var(--success-soft)', fg: 'var(--success)' },
-  rejected: { bg: 'var(--danger-soft)', fg: 'var(--danger)' },
-  cancelled: { bg: 'var(--neutral-soft)', fg: 'var(--muted)' }
-};
-
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString('fr-FR');
@@ -68,14 +61,9 @@ function describeStep(step, currentUserId) {
   };
 }
 
-function StatusBadge({ status }) {
-  const style = STATUS_STYLES[status] ?? STATUS_STYLES.cancelled;
-  return (
-    <span className="status-badge" style={{ background: style.bg, color: style.fg }}>
-      <span className="status-dot" style={{ background: style.fg }} />
-      {status === 'pending' ? 'En attente' : status === 'approved' ? 'Approuvée' : status === 'rejected' ? 'Refusée' : status === 'cancelled' ? 'Annulée' : status}
-    </span>
-  );
+function getInitials(fullName) {
+  const parts = (fullName || '').split(' ').filter(Boolean);
+  return ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '?';
 }
 
 function ApprovalInbox() {
@@ -193,70 +181,67 @@ function ApprovalInbox() {
           </div>
         )}
 
-        <div className="section-card p-4 p-md-5">
+        <div className="section-card overflow-hidden">
           {loading ? (
-            <div className="text-center py-5 muted-note">Chargement...</div>
+            <div className="text-center p-5 muted-note">Chargement...</div>
           ) : steps.length === 0 ? (
-            <p className="muted-note mb-0">Aucune demande en attente.</p>
+            <p className="muted-note mb-0 p-4">Aucune demande en attente.</p>
           ) : (
-            <div className="inbox-table-wrap">
-              <div className="table-responsive">
-                <table className="inbox-table table align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th className="fw-medium">Matricule</th>
-                      <th className="fw-medium">Employé</th>
-                      <th className="fw-medium">Type</th>
-                      <th className="fw-medium">Dates</th>
-                      <th className="fw-medium">Durée</th>
-                      <th className="fw-medium">Étape</th>
-                      <th className="fw-medium">Statut</th>
-                      <th className="fw-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {steps.map((step) => {
-                      const info = describeStep(step, currentUser?.id);
-                      return (
-                        <tr key={step.step_id}>
-                          <td className="fw-medium text-nowrap">{step.matricule ?? '—'}</td>
-                          <td>
-                            <div className="fw-semibold">{info.fullName}</div>
-                            {info.createdForSomeoneElse && (
-                              <div className="muted-note">
-                                Créée par {info.creatorName}{info.creatorRole ? ` (${info.creatorRole})` : ''}
+            <div className="table-responsive">
+              <table className="inbox-table table align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th className="fw-medium">Employé</th>
+                    <th className="fw-medium">Congé</th>
+                    <th className="fw-medium">Étape</th>
+                    <th className="fw-medium text-end">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {steps.map((step) => {
+                    const info = describeStep(step, currentUser?.id);
+                    return (
+                      <tr key={step.step_id}>
+                        <td>
+                          <div className="d-flex align-items-center gap-3">
+                            <span className="emp-avatar" aria-hidden="true">{getInitials(info.fullName)}</span>
+                            <div>
+                              <div className="fw-semibold">{info.fullName}</div>
+                              <div className="cell-sub">
+                                {step.matricule ? `Matricule ${step.matricule}` : ''}
+                                {info.createdForSomeoneElse ? `${step.matricule ? ' · ' : ''}Créée par ${info.creatorName}` : ''}
                               </div>
-                            )}
-                          </td>
-                          <td>{LEAVE_TYPE_LABELS[step.leave_type] ?? step.leave_type}</td>
-                          <td className="text-nowrap">
-                            {formatDate(step.start_date)}{info.endDate ? ` → ${formatDate(info.endDate)}` : ''}
-                          </td>
-                          <td className="text-nowrap">{step.duration} j</td>
-                          <td>
-                            <div className="fw-medium">{info.targetRole}</div>
-                            {info.targetName && <div className="muted-note">{info.targetName}</div>}
-                            <span
-                              className="mini-badge"
-                              style={info.isDirectTarget
-                                ? { background: 'var(--amber-soft)', color: 'var(--accent-amber)' }
-                                : { background: 'var(--neutral-soft)', color: 'var(--muted)' }}
-                            >
-                              {info.isDirectTarget ? 'Assignée à vous' : 'Supérieur hiérarchique'}
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="fw-medium">{LEAVE_TYPE_LABELS[step.leave_type] ?? step.leave_type}</div>
+                          <div className="cell-sub">
+                            {formatDate(step.start_date)}{info.endDate ? ` → ${formatDate(info.endDate)}` : ''} · {step.duration} j
+                          </div>
+                        </td>
+                        <td>
+                          {info.isDirectTarget ? (
+                            <span className="mini-badge" style={{ background: 'var(--amber-soft)', color: 'var(--accent-amber)' }}>
+                              Assignée à vous
                             </span>
-                          </td>
-                          <td><StatusBadge status={step.request_status ?? 'pending'} /></td>
-                          <td>
-                            <button className="btn btn-sm primary-button px-3" onClick={() => openDecision(step)}>
-                              Traiter
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          ) : (
+                            <>
+                              <div className="fw-medium">{info.targetName || info.targetRole}</div>
+                              {info.targetName && <div className="cell-sub">{info.targetRole}</div>}
+                            </>
+                          )}
+                        </td>
+                        <td className="text-end">
+                          <button className="btn btn-sm primary-button px-3" onClick={() => openDecision(step)}>
+                            Traiter
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </div>

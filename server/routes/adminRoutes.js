@@ -14,5 +14,8 @@ router.post('/update-request-step', authenticateToken, authorizeRoles('drh', 'hr
 router.post('/update-request-step-target', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.updateRequestStepTarget);
 router.post('/update-request-step-decision', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.updateRequestStepDecision);
 router.post('/trigger-monthly-job', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.triggerMonthlyJob);
+router.post('/assign-create-others', authenticateToken, authorizeRoles('admin'), adminController.assignCreateForOthers);
+router.post('/assign-drh', authenticateToken, authorizeRoles('admin'), adminController.assignDRH);
+router.get('/logs', authenticateToken, authorizeRoles('admin'), adminController.getLogs);
 
 module.exports = router;

@@ -169,13 +169,70 @@
   margin-top: 2px;
 }
 
-.leave-modal .field-error.boxed {
+/* Date-error toasts: fixed to the viewport so they stay visible regardless of
+   where the modal is scrolled, stacked top to bottom, each auto-dismissing. */
+.leave-toast-stack {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1060;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, calc(100vw - 40px));
+}
+
+.leave-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid #ebc5c0;
+  border-left: 4px solid var(--danger);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  box-shadow: 0 10px 24px rgba(27, 36, 48, 0.14);
+  animation: leaveToastIn 0.2s ease-out;
+}
+
+@keyframes leaveToastIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leave-toast { animation: none; }
+}
+
+.leave-toast svg {
+  flex: none;
+  color: var(--danger);
+  margin-top: 1px;
+}
+
+.leave-toast span {
+  flex: 1;
+}
+
+.leave-toast-close {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 2px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.leave-toast-close:hover {
   background: var(--danger-soft);
-  border-left: 3px solid var(--danger);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-top: 0;
-  margin-bottom: 1rem;
+  color: var(--danger);
 }
 
 .leave-modal-footer {

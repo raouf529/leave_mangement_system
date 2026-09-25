@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import api from './api';
 import './LeaveRequestModal.css';
 
@@ -72,17 +72,45 @@ function validateForm({ startDate, endDate, allowPast, needsJustification, justi
   return errors;
 }
 
-// Message shown under a field (or in a box), with an icon so it is easy to spot
-function FieldError({ id, message, boxed = false }) {
+// Message shown under a field, with an icon so it is easy to spot
+function FieldError({ id, message }) {
   if (!message) return null;
   return (
-    <div id={id} className={`field-error ${boxed ? 'boxed' : ''}`} role="alert">
+    <div id={id} className="field-error" role="alert">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
       <span>{message}</span>
+    </div>
+  );
+}
+
+// Small stack of auto-dismissing warning toasts, used for date-related
+// problems instead of printing them as red text under the field — the field
+// still gets a red border so it's clear which input is at fault, but the
+// explanation surfaces as a toast that's easy to notice and easy to dismiss.
+function ToastStack({ toasts, onDismiss }) {
+  if (toasts.length === 0) return null;
+  return (
+    <div className="leave-toast-stack" role="alert" aria-live="assertive">
+      {toasts.map((toast) => (
+        <div key={toast.id} className="leave-toast">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <span>{toast.message}</span>
+          <button type="button" className="leave-toast-close" onClick={() => onDismiss(toast.id)} aria-label="Fermer">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+              <line x1="6" y1="6" x2="18" y2="18" />
+              <line x1="18" y1="6" x2="6" y2="18" />
+            </svg>
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
@@ -133,6 +161,42 @@ function LeaveRequestModal({ onClose, onSuccess, targetEmployeeId = null, target
   // A field's error is shown once the user has touched it, or after a first submit attempt
   const visibleError = (name) => (submitted || touched[name] ? errors[name] : '');
   const touch = (name) => setTouched((prev) => ({ ...prev, [name]: true }));
+
+  // Date-related problems (bad/missing dates, end before start, overlap with an
+  // approved leave) surface as toasts rather than red text under the field.
+  const [toasts, setToasts] = useState([]);
+  const toastTimers = useRef({});
+  const lastDateErrorRef = useRef({ startDate: '', endDate: '', range: '' });
+
+  function pushToast(message) {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts((prev) => [...prev, { id, message }]);
+    toastTimers.current[id] = setTimeout(() => dismissToast(id), 5000);
+  }
+  function dismissToast(id) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+    clearTimeout(toastTimers.current[id]);
+    delete toastTimers.current[id];
+  }
+  useEffect(() => () => {
+    Object.values(toastTimers.current).forEach(clearTimeout);
+  }, []);
+
+  useEffect(() => {
+    const isRangeVisible = submitted || (touched.startDate && touched.endDate);
+    const next = {
+      startDate: (submitted || touched.startDate) ? (errors.startDate || '') : '',
+      endDate: (submitted || touched.endDate) ? (errors.endDate || '') : '',
+      range: isRangeVisible ? (errors.range || '') : ''
+    };
+    ['startDate', 'endDate', 'range'].forEach((field) => {
+      if (next[field] && next[field] !== lastDateErrorRef.current[field]) {
+        pushToast(next[field]);
+      }
+    });
+    lastDateErrorRef.current = next;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errors.startDate, errors.endDate, errors.range, submitted, touched.startDate, touched.endDate]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -185,6 +249,7 @@ function LeaveRequestModal({ onClose, onSuccess, targetEmployeeId = null, target
         style={{ width: '100%', maxWidth: '760px' }}
         onClick={(e) => e.stopPropagation()}
       >
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
         <div className="leave-modal-header">
           <div className="accent-bar" />
           <div className="d-flex align-items-center justify-content-between px-4 px-md-5 pt-4 pb-3">
@@ -237,10 +302,8 @@ function LeaveRequestModal({ onClose, onSuccess, targetEmployeeId = null, target
                   onChange={(e) => { setStartDate(e.target.value); touch('startDate'); }}
                   onBlur={() => touch('startDate')}
                   aria-invalid={Boolean(visibleError('startDate'))}
-                  aria-describedby={visibleError('startDate') ? 'leave-start-date-error' : undefined}
                   required
                 />
-                <FieldError id="leave-start-date-error" message={visibleError('startDate')} />
               </div>
               <div className="col-12 col-sm-6">
                 <label className="form-label fw-medium" htmlFor="leave-end-date">
@@ -255,18 +318,10 @@ function LeaveRequestModal({ onClose, onSuccess, targetEmployeeId = null, target
                   onChange={(e) => { setEndDate(e.target.value); touch('endDate'); }}
                   onBlur={() => touch('endDate')}
                   aria-invalid={Boolean(visibleError('endDate'))}
-                  aria-describedby={visibleError('endDate') ? 'leave-end-date-error' : undefined}
                   required
                 />
-                <FieldError id="leave-end-date-error" message={visibleError('endDate')} />
               </div>
             </div>
-
-            <FieldError
-              id="leave-range-error"
-              message={submitted || (touched.startDate && touched.endDate) ? errors.range : ''}
-              boxed
-            />
 
             <p className="duration-note mb-4">
               Durée calculée : <strong style={{ color: 'var(--ink)' }}>{duration > 0 ? `${duration} jour(s)` : '—'}</strong>

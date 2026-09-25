@@ -56,8 +56,8 @@ const authController = {
                 firstName: user.prenom,
                 lastName: user.nom,
                 email: user.email,
-                role: mapRole(user.role, user.is_leave_responsible),
-                roleLabel: getRoleLabel(user.role),
+                role: mapRole(user.role_leave_validation, user.is_leave_responsible),
+                roleLabel: getRoleLabel(user.role_leave_validation),
                 unitId: user.service_id ?? user.departement_id ?? user.direction_id ?? null,
                 canCreateForEmployee: Boolean(user.can_create_for_employee),
             });
