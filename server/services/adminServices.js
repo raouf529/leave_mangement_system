@@ -668,7 +668,7 @@ const adminServices = {
 },
 async getLogs(){
     try {
-        const [logs] = await pool.query(`SELECT * FROM Logs ORDER BY created_at DESC`);
+        const [logs] = await pool.query(`SELECT * FROM Logs ORDER BY action_timestamp DESC`);
         return logs;
     } catch (error) {
         throw new Error('Error getting logs: ' + error.message);

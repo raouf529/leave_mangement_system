@@ -1,14 +1,6 @@
 .app-sidebar,
 .sidebar-topbar,
 .notif-panel {
-  --ink: #1b2430;
-  --muted: #65707d;
-  --surface: #ffffff;
-  --border: #e4e8ed;
-  --primary: #1f5673;
-  --primary-soft: #e8f0f4;
-  --danger: #b03a2e;
-  --danger-soft: #fbebe9;
   --sidebar-w: 260px;
 }
 

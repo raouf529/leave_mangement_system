@@ -1,8 +1,4 @@
 .login-page {
-  --ink: #1b2430;
-  --muted: #65707d;
-  --canvas: #f5f7fa;
-  --primary: #1f5673;
   background: var(--canvas);
 }
 

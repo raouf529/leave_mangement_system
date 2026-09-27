@@ -11,11 +11,18 @@ try {
 
 
 const backgroundService = {
-    // check expired leave requests and update their status to 'time out'
+    // check expired leave requests and update their status to 'time out'.
+    // end_date is NOT stored in the DB — it is computed as start_date + duration days.
+    // A request is considered expired when its last day is strictly in the past.
     async checkExpiredLeaveRequests() {
         try {
+            // DATE_ADD(start_date, INTERVAL duration - 1 DAY) gives the inclusive last day
+            // of the leave (e.g. start 2026-01-01, duration 3 → last day 2026-01-03).
+            // We mark it as timed-out when that last day is before today.
             const [expiredRequests] = await pool.query(
-                `SELECT request_id, Emp_id FROM Leave_request WHERE request_status = 'pending' AND end_date < NOW()`
+                `SELECT request_id, Emp_id FROM Leave_request
+                 WHERE request_status = 'pending'
+                   AND DATE_ADD(start_date, INTERVAL (duration - 1) DAY) < CURDATE()`
             );
             for (const request of expiredRequests) {
                 await pool.query(
@@ -25,7 +32,7 @@ const backgroundService = {
                 await createNotification({
                     targetId: request.Emp_id,
                     requestId: request.request_id,
-                    content: `Your leave request has been timed out.`
+                    content: `Votre demande de congé a expiré (délai dépassé).`
                 });
             }
         } catch (error) {
@@ -53,14 +60,7 @@ const backgroundService = {
                             [employee.id, exerciseYear]
                         );
                         // insert log
-                        await createLog({
-                            empId: employee.id,
-                            action: 'create_Exercise',
-                            requestId: null,
-                            meta: {
-                                exerciseYear,
-                            }
-                        })
+                        await createLog(employee.id, 'CREATE_EXERCISE', `Exercice ${exerciseYear} créé automatiquement (solde initial: 0).`);
                     }
                 }
             }
@@ -91,15 +91,7 @@ const backgroundService = {
                     [balanceToAdd, employee.id, exerciseYear]
                 );
                 // insert log
-                await createLog({
-                    empId: employee.id,
-                    action: 'update_Exercise',
-                    requestId: null,
-                    meta: {
-                        exerciseYear,
-                        balanceToAdd
-                    }
-                })
+                await createLog(employee.id, 'UPDATE_EXERCISE', `Solde de l'exercice ${exerciseYear} mis à jour (+${balanceToAdd} jours).`);
                 // Create notification for employee
                 await createNotification({
                     targetId: employee.id,
@@ -126,8 +118,14 @@ backgroundService.runMonthlyJob = async function runMonthlyJob() {
 };
 
 if (cron) {
+    // 1st of every month at midnight: credit balance + (in July) create new exercise rows
     cron.schedule('0 0 1 * *', () => {
         backgroundService.runMonthlyJob().catch((error) => console.error('Monthly exercise job failed:', error.message));
+    });
+
+    // Every day at midnight: expire pending requests whose leave period is fully past
+    cron.schedule('0 0 * * *', () => {
+        backgroundService.checkExpiredLeaveRequests().catch((error) => console.error('Expired request check failed:', error.message));
     });
 }
 

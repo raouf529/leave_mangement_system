@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react';
 import api from './api';
 import Header from './header';
 import LeaveRequestModal from './LeaveRequestModal';
+import './theme.css';
 import './dashboard.css';
 // this page where employee information and can send leave request and see the status of leave request
 
@@ -56,8 +57,6 @@ function getExerciseRange(exerciseLabel) {
   return {
     startYear,
     endYear,
-    from: `01/07/${startYear}`,
-    to: `30/06/${endYear}`
   };
 }
 
@@ -70,16 +69,7 @@ function isCurrentExercise(exerciseLabel) {
   return today >= start && today <= end;
 }
 
-// Fallback when the API doesn't send the exercise's initial entitlement
 const DEFAULT_EXERCISE_DAYS = 30;
-
-function getBalanceHealth(balance, total) {
-  const safeTotal = total > 0 ? total : DEFAULT_EXERCISE_DAYS;
-  const pct = Math.max(0, Math.min(100, (Number(balance) / safeTotal) * 100));
-  const level = pct >= 60 ? 'high' : pct >= 30 ? 'medium' : 'low';
-  const LABELS = { high: 'Solde confortable', medium: 'Solde moyen', low: 'Solde bas' };
-  return { pct, level, label: LABELS[level], total: safeTotal };
-}
 
 function getEndDate(startDate, duration) {
   if (!startDate) return null;
@@ -347,10 +337,7 @@ function Dashboard() {
                   {activeExercises.map((exercise, index) => {
                     const range = getExerciseRange(exercise.exercise);
                     const current = isCurrentExercise(exercise.exercise);
-                    const health = getBalanceHealth(
-                      exercise.balance,
-                      Number(exercise.total ?? exercise.allocated ?? exercise.initialBalance)
-                    );
+                    const total = Number(exercise.total ?? exercise.allocated ?? exercise.initialBalance ?? DEFAULT_EXERCISE_DAYS);
                     return (
                       <div className="col-12 col-sm-6 col-md-4" key={index}>
                         <div className={`exercise-card h-100${current ? ' current' : ''}`}>
@@ -360,16 +347,10 @@ function Dashboard() {
                             </p>
                             {current && <span className="current-pill">Exercice en cours</span>}
                           </div>
-                          {range && <p className="muted-note mb-0 mt-1">Du {range.from} au {range.to}</p>}
                           <p className="exercise-balance mb-0">
                             {exercise.balance}{' '}
-                            <span className="exercise-unit">/ {health.total} jours</span>
+                            <span className="exercise-unit">/ {total} jours</span>
                           </p>
-                          {!current && (
-                            <span className={`balance-chip balance-chip-${health.level}`}>
-                              {health.label}
-                            </span>
-                          )}
                         </div>
                       </div>
                     );

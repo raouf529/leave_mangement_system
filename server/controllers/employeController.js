@@ -36,7 +36,7 @@ const employeController = {
             res.status(201).json({ success: true, employeeId: newEmployeeId });
         } catch (error) {
             console.error('Error creating employee:', error);
-            res.status(500).json({ error: 'Failed to create employee' });
+            res.status(error.statusCode || 500).json({ error: error.message || 'Failed to create employee' });
         }
     },
     async changeRole(req, res){

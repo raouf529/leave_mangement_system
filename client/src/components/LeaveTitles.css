@@ -1,15 +1,3 @@
-.leave-titles-page {
-  --ink: #050505;
-  --muted: #55708f;
-  --surface: #fff;
-  --canvas: #f8fafc;
-  --border: #dce5ef;
-  --primary: #0867d8;
-  min-height: 100vh;
-  background: var(--canvas);
-  color: var(--ink);
-}
-
 .leave-titles-main {
   max-width: 1240px;
   margin: 0 auto;

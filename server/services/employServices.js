@@ -1,7 +1,11 @@
 const db = require('../db');
 const { createLog } = require('../utils/dbUtils');
 const bcrypt = require('bcrypt');
-const { assignBalance, getExerciseWindowForDate } = require('../utils/helpers');
+const { assignBalance, getExerciseYearForDate } = require('../utils/helpers');
+
+function monthsBetween(from, to) {
+    return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+}
 
 // month is 0-based (as returned by getMonth()); day 0 of next month = last day of this month (handles leap years)
 function getMonthEnd(year, month){
@@ -22,69 +26,65 @@ const employServices = {
     async createEmployee(employeeData) {
         try {
             const { 
-                nom, nom_jeune_fille, prenom, email, 
-                date_entree, direction_id, 
+                nom, nom_jeune_fille, prenom, email,
+                date_entree, direction_id,
                 departement_id, service_id, matricule, 
-                fonction, role, role_leave_validation, can_create_for_employee, is_leave_responsible,
+                fonction, role_leave_validation, can_create_for_employee, is_leave_responsible,
                 adminId // ID of the admin creating this user for logging
             } = employeeData;
 
             // Use a constant password for MVP demo (will be communicated to users manually)
             const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
             
-            const employeRole = role || 'employe';
             const employeRoleLeaveValidation = role_leave_validation || 'employe';
+            if (!['employe', 'chef_service', 'chef_departement', 'directeur'].includes(employeRoleLeaveValidation)) {
+                const error = new Error('Invalid employee validation role');
+                error.statusCode = 400;
+                throw error;
+            }
             const employeCanCreateForEmployee = can_create_for_employee ? 1 : 0;
             const employeIsLeaveResponsible = is_leave_responsible ? 1 : 0;
 
             const [result] = await db.query(
                 `INSERT INTO Employe (
                     nom, nom_jeune_fille, prenom, email, password, 
-                    date_entree, role, direction_id, departement_id, 
+                    date_entree, direction_id, departement_id,
                     service_id, matricule, fonction, 
                     can_create_for_employee, role_leave_validation, is_leave_responsible
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
                 [
                     nom, nom_jeune_fille || null, prenom, email, hashedPassword,
-                    date_entree || new Date(), employeRole, direction_id || null, departement_id || null,
+                    date_entree || new Date(), direction_id || null, departement_id || null,
                     service_id || null, matricule, fonction || null,
                     employeCanCreateForEmployee, employeRoleLeaveValidation, employeIsLeaveResponsible
                 ]
             );
 
-            await createLog({
-                empId: adminId || result.insertId, // Log who created it if provided, else self
-                action: 'create_employee',
-                requestId: null,
-                meta: {
-                    role: employeRole,
-                    newEmployeeId: result.insertId,
-                    email: email
-                }
-            });
+            await createLog(
+                adminId || result.insertId,
+                'CREATE_EMPLOYEE',
+                `Création du profil de l'employé ${prenom} ${nom} (${email}) avec le rôle ${employeRoleLeaveValidation}.`
+            );
 
             if (['chef_service', 'chef_departement', 'directeur'].includes(employeRoleLeaveValidation)) {
                 await replaceChef(result.insertId, employeRoleLeaveValidation, service_id, departement_id, direction_id);
             }
 
             // Initialize exercise for the new employee
-            const year = getExerciseYearForDate(new Date());
-            const balance = calculateInitialBalance(new Date(), new Date());
+            const hireDate = date_entree ? new Date(`${date_entree}T00:00:00`) : new Date();
+            const year = getExerciseYearForDate(hireDate);
+            const balance = calculateInitialBalance(hireDate);
             const [newExercise] = await db.query(
                 `INSERT INTO Exercise (emp_id, year, balance, created_at, updated_at) 
                 VALUES (?, ?, ?, NOW(), NOW())`,
                 [result.insertId, year, balance]
             )
             // insert log
-            await createLog({
-                empId: result.insertId,
-                action: 'create_exercise',
-                requestId: null,
-                meta: {
-                    exerciseYear: year,
-                    balance
-                }
-            })
+            await createLog(
+                result.insertId,
+                'CREATE_EXERCISE',
+                `Exercice ${year} créé avec un solde initial de ${balance} jour(s).`
+            );
             return result.insertId;
         } catch (error) {
             throw error;

@@ -616,3 +616,33 @@
 }
 
 .list-error-retry:hover { opacity: 0.88; }
+
+/* ══════════════════════════════════════
+   LOGS TABLE STYLING
+   ══════════════════════════════════════ */
+.log-row {
+  transition: background-color 150ms ease;
+}
+
+.log-row:hover {
+  background-color: var(--neutral-soft);
+}
+
+.log-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.log-details-cell {
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  max-width: 600px;
+}

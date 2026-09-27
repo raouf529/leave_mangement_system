@@ -665,7 +665,7 @@ const requestService = {
                         : `${employeeRows[0].nom} ${employeeRows[0].prenom} vous a soumis une demande de congé du ${startDate} au ${endDate}.`
                 }, connection);
             }
-            await createLog(creatorId, 'REQUEST_CREATED', `Demande #${result.insertId} (${leaveType}) créée pour l'employé #${employeeId}, du ${startDate} pour ${effectiveDuration} jour(s).`, connection);
+            await createLog(creatorId, 'REQUEST_CREATED', `Demande de congé (${leaveType}) créée pour ${employeeRows[0].nom} ${employeeRows[0].prenom}, du ${startDate} pour ${effectiveDuration} jour(s).`, connection);
             await connection.commit();
             return result.insertId;
         } catch (error) {
@@ -699,7 +699,7 @@ const requestService = {
         const [steps] = await pool.query(
                         `SELECT rs.*, lr.start_date, lr.duration, lr.leave_type, lr.justification, lr.url_justification,
                             lr.reason_type, lr.request_status,
-            e.nom, e.prenom, e.email,
+            e.nom, e.prenom, e.email, e.fonction,
             creator.nom AS creator_last_name, creator.prenom AS creator_first_name,
             creator.role_leave_validation AS creator_role,
             target.nom AS target_nom, target.prenom AS target_prenom, target.role_leave_validation AS target_role
@@ -774,12 +774,13 @@ const requestService = {
                 && ['chef_departement', 'directeur'].includes(approver.role_leave_validation)
                 && await isSuperiorOf(currentUserId, step.target_id, connection);
 
-            const [requestRows] = await connection.query('SELECT * FROM Leave_request WHERE request_id = ? FOR UPDATE', [step.request_id]);
+            const [requestRows] = await connection.query('SELECT lr.*, e.nom, e.prenom FROM Leave_request lr JOIN Employe e ON e.id = lr.Emp_id WHERE lr.request_id = ? FOR UPDATE', [step.request_id]);
             if (requestRows.length === 0) {
                 throw new Error('Demande introuvable.');
             }
 
             const request = requestRows[0];
+            const requesterName = `${request.nom} ${request.prenom}`;
             const approverName = `${approver.nom} ${approver.prenom}`;
             const targetDecision = isBypass ? 'skipped' : decision;
             await connection.query(
@@ -803,7 +804,7 @@ const requestService = {
                     requestId: request.request_id,
                     content: `Votre demande de congé du ${request.start_date} a été refusée par ${approverName}.`
                 });
-                await createLog(currentUserId, 'REQUEST_REJECTED', `Demande #${request.request_id} refusée par ${approverName}.`, connection);
+                await createLog(currentUserId, 'REQUEST_REJECTED', `Demande de congé de ${requesterName} refusée par ${approverName}.`, connection);
             } else {
                 const forwardingId = isBypass ? currentUserId : step.target_id;
                 nextTarget = await forwardRequestToNextStep(request.request_id, forwardingId, null, null, connection);
@@ -813,14 +814,14 @@ const requestService = {
                     notifications.push({
                         targetId: nextTarget.id,
                         requestId: request.request_id,
-                        content: `Une demande de congé vous a été transmise pour examen par ${approverName}.`
+                        content: `La demande de congé de ${requesterName} vous a été transmise pour examen par ${approverName}.`
                     });
                     notifications.push({
                         targetId: request.Emp_id,
                         requestId: request.request_id,
-                        content: `Votre demande de congé a été approuvée par ${approverName} et transmise à l'étape suivante.`
+                        content: `Votre demande de congé a été approuvée par ${approverName} et transmise à ${nextTarget.nom} ${nextTarget.prenom}.`
                     });
-                    await createLog(currentUserId, 'REQUEST_FORWARDED', `Demande #${request.request_id} approuvée par ${approverName} et transmise à l'employé #${nextTarget.id}.`, connection);
+                    await createLog(currentUserId, 'REQUEST_FORWARDED', `Demande de congé de ${requesterName} approuvée par ${approverName} et transmise à ${nextTarget.nom} ${nextTarget.prenom}.`, connection);
                 } else {
                     // No further step: this was the final approval.
                     await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['approved', request.request_id]);
@@ -832,9 +833,9 @@ const requestService = {
                     notifications.push({
                         targetId: request.Emp_id,
                         requestId: request.request_id,
-                        content: `Votre demande de congé du ${request.start_date} a été approuvée par ${approverName}.`
+                        content: `Votre demande de congé du ${request.start_date} a été définitivement approuvée par ${approverName}.`
                     });
-                    await createLog(currentUserId, 'REQUEST_APPROVED_FINAL', `Demande #${request.request_id} approuvée définitivement par ${approverName}.`, connection);
+                    await createLog(currentUserId, 'REQUEST_APPROVED_FINAL', `Demande de congé de ${requesterName} approuvée définitivement par ${approverName}.`, connection);
                 }
             }
 
@@ -883,6 +884,10 @@ const requestService = {
             }
         }
 
+        // Get employee info for notification and log messages
+        const [empRows] = await pool.query('SELECT nom, prenom FROM Employe WHERE id = ?', [currentUserId]);
+        const empName = empRows.length > 0 ? `${empRows[0].nom} ${empRows[0].prenom}` : 'L\'employé';
+
         const connection = await pool.getConnection();
         try {
             await connection.beginTransaction();
@@ -890,7 +895,7 @@ const requestService = {
                 await refundApprovedAllocations(requestId, daysToRefund, connection);
             }
             await connection.query('UPDATE Leave_request SET request_status = ? WHERE request_id = ?', ['cancelled', requestId]);
-            await createLog(currentUserId, 'REQUEST_CANCELLED', `Demande #${requestId} annulée (${daysToRefund} jour(s) remboursé(s)).`, connection);
+            await createLog(currentUserId, 'REQUEST_CANCELLED', `Demande de congé annulée par ${empName} (${daysToRefund} jour(s) remboursé(s)).`, connection);
             await connection.commit();
         } catch (error) {
             await connection.rollback();
@@ -898,10 +903,6 @@ const requestService = {
         } finally {
             connection.release();
         }
-
-        // Get employee info for notification message
-        const [empRows] = await pool.query('SELECT nom, prenom FROM Employe WHERE id = ?', [currentUserId]);
-        const empName = empRows.length > 0 ? `${empRows[0].nom} ${empRows[0].prenom}` : 'L\'employé';
 
         // Notify the owner (employee)
         await createNotification({

@@ -1,0 +1,195 @@
+:root {
+  --ink: #1c2530;
+  --muted: #626c78;
+  --surface: #ffffff;
+  --canvas: #f7f5f0;
+  --border: #e2ded3;
+  --primary: #1b3a5c;
+  --primary-hover: #14304c;
+  --primary-soft: #e8edf2;
+  --accent: #b8862e;
+  --accent-soft: #f6ecd8;
+  --accent-amber: #8a5300;
+  --amber-soft: #fff3d6;
+  --success: #13694d;
+  --success-soft: #ddf3ea;
+  --danger: #b03a2e;
+  --danger-soft: #fbebe9;
+  --neutral-soft: #efece4;
+}
+
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ---------- Cards ---------- */
+.section-card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 2px 6px rgba(27, 36, 48, 0.06);
+  padding: 1.25rem;
+}
+
+.hero-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* A small colored tick before a section heading — a cheap, consistent way
+   to give each major block a bit of visual weight instead of plain gray
+   text on white, without adding a whole icon set. */
+.section-title-accent::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 1em;
+  margin-right: 0.6rem;
+  vertical-align: -2px;
+  background: var(--primary);
+  border-radius: 2px;
+}
+
+.muted-note {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.92rem;
+  padding: 1.75rem 1rem;
+  border: 1px dashed #cdd4dc;
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 3rem 0;
+  color: var(--muted);
+}
+
+/* ---------- Status ---------- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* ---------- Label/value detail grid (used by the dashboard's row
+   details and the approval-inbox decision panel) ---------- */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem 1.5rem;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.detail-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.detail-value {
+  font-size: 0.92rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  border-radius: 9px;
+}
+
+.btn-brand {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+  font-weight: 500;
+}
+
+.btn-brand:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  color: #fff;
+}
+
+.cancel-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cancel-btn:hover:not(:disabled) {
+  background: var(--danger-soft);
+  border-color: #ebc5c0;
+  color: var(--danger);
+}
+
+.cancel-btn:disabled {
+  opacity: 0.45;
+}
+
+/* ---------- Form validation ---------- */
+.required-mark {
+  color: var(--danger);
+}
+
+.has-error {
+  border-color: var(--danger);
+}
+
+.has-error:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 0.2rem rgba(176, 58, 46, 0.15);
+}
+
+.field-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.field-error svg {
+  flex: none;
+  margin-top: 2px;
+}

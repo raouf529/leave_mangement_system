@@ -8,4 +8,5 @@ router.post('/register', authenticateToken, authorizeRoles('hr'), authController
 router.post('/login', authController.loginEmployee);
 router.get('/me', authenticateToken, authController.getCurrentUser);
 router.post('/logout', authController.logout);
+router.post('/refresh', authController.refreshToken);
 module.exports = router;

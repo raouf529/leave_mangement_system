@@ -218,6 +218,31 @@ function Feedback({ status }) {
   );
 }
 
+function getLogBadgeStyle(action) {
+  const a = (action || '').toLowerCase();
+  if (a.includes('create') || a.includes('add') || a.includes('approve') || a.includes('success')) {
+    return { bg: 'var(--success-soft)', text: 'var(--success)', icon: 'plus-circle' };
+  }
+  if (a.includes('delete') || a.includes('remove') || a.includes('reject') || a.includes('error') || a.includes('fail')) {
+    return { bg: 'var(--danger-soft)', text: 'var(--danger)', icon: 'x-circle' };
+  }
+  if (a.includes('update') || a.includes('edit') || a.includes('modify')) {
+    return { bg: 'var(--amber-soft)', text: 'var(--accent-amber)', icon: 'edit' };
+  }
+  if (a.includes('login') || a.includes('auth')) {
+    return { bg: 'var(--primary-soft)', text: 'var(--primary)', icon: 'log-in' };
+  }
+  return { bg: 'var(--neutral-soft)', text: 'var(--muted)', icon: 'activity' };
+}
+
+function LogIcon({ type }) {
+  if (type === 'plus-circle') return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>;
+  if (type === 'x-circle') return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>;
+  if (type === 'edit') return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+  if (type === 'log-in') return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>;
+  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+}
+
 /* ─── Admin Header ─── */
 function AdminHeader() {
   const { fullName, roleLabel, role } = useCurrentUser();
@@ -627,13 +652,29 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {logs.map((log, idx) => (
-                      <tr key={idx}>
-                        <td className="text-nowrap">{new Date(log.created_at).toLocaleString()}</td>
-                        <td><span className="badge bg-secondary">{log.action || log.action_type || 'INFO'}</span></td>
-                        <td>{log.message || log.description || JSON.stringify(log)}</td>
-                      </tr>
-                    ))}
+                    {logs.map((log, idx) => {
+                      const actionLabel = log.action_type || log.action || 'INFO';
+                      const style = getLogBadgeStyle(actionLabel);
+                      return (
+                        <tr key={idx} className="log-row">
+                          <td className="text-nowrap muted-note fw-medium">
+                            {new Date(log.action_timestamp || log.created_at).toLocaleString()}
+                          </td>
+                          <td>
+                            <span 
+                              className="log-badge"
+                              style={{ backgroundColor: style.bg, color: style.text }}
+                            >
+                              <LogIcon type={style.icon} />
+                              {actionLabel}
+                            </span>
+                          </td>
+                          <td className="log-details-cell">
+                            {log.details || log.message || log.description || JSON.stringify(log)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

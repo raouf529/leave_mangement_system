@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import api from './api';
 import Header from './header';
 import useCurrentUser from '../hooks/useCurrentUser';
+import './theme.css';
 import './ApprovalInbox.css';
 
 function getMySteps() {
@@ -207,6 +208,7 @@ function ApprovalInbox() {
                             <span className="emp-avatar" aria-hidden="true">{getInitials(info.fullName)}</span>
                             <div>
                               <div className="fw-semibold">{info.fullName}</div>
+                              <div className="cell-sub">{step.fonction || 'Fonction non renseignée'}</div>
                               <div className="cell-sub">
                                 {step.matricule ? `Matricule ${step.matricule}` : ''}
                                 {info.createdForSomeoneElse ? `${step.matricule ? ' · ' : ''}Créée par ${info.creatorName}` : ''}
@@ -233,7 +235,7 @@ function ApprovalInbox() {
                           )}
                         </td>
                         <td className="text-end">
-                          <button className="btn btn-sm primary-button px-3" onClick={() => openDecision(step)}>
+                          <button className="btn btn-sm btn-brand px-3" onClick={() => openDecision(step)}>
                             Traiter
                           </button>
                         </td>
@@ -259,47 +261,83 @@ function ApprovalInbox() {
             <div className="decision-header d-flex align-items-start justify-content-between gap-3">
               <h2 id="decision-title" className="h5 fw-bold mb-0 pt-1">Décision — {selectedInfo.fullName}</h2>
               <button type="button" className="close-btn" onClick={closeDecision} aria-label="Fermer" disabled={isActioning}>
-                ✕
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                </svg>
               </button>
             </div>
 
             <div className="decision-body">
-              <div className="decision-info">
-                <p className="decision-row"><span className="decision-label">Matricule :</span> {selectedStep.matricule ?? '—'}</p>
-                {selectedStep.email && (
-                  <p className="decision-row"><span className="decision-label">Email :</span> {selectedStep.email}</p>
-                )}
-                <p className="decision-row">
-                  <span className="decision-label">Type :</span> {LEAVE_TYPE_LABELS[selectedStep.leave_type] ?? selectedStep.leave_type}
-                </p>
-                <p className="decision-row">
-                  <span className="decision-label">Dates :</span> {formatDate(selectedStep.start_date)}
-                  {selectedInfo.endDate ? ` → ${formatDate(selectedInfo.endDate)}` : ''} ({selectedStep.duration} j)
-                </p>
-                {selectedStep.reason_type && (
-                  <p className="decision-row">
-                    <span className="decision-label">Motif :</span> {REASON_LABELS[selectedStep.reason_type] ?? selectedStep.reason_type}
-                  </p>
-                )}
+              <div className="decision-info section-card mb-3">
+                <div className="detail-grid">
+                  <div className="detail-item">
+                    <span className="detail-label">Matricule</span>
+                    <span className="detail-value">{selectedStep.matricule ?? '—'}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Fonction</span>
+                    <span className="detail-value">{selectedStep.fonction || '—'}</span>
+                  </div>
+                  {selectedStep.email && (
+                    <div className="detail-item">
+                      <span className="detail-label">Email</span>
+                      <span className="detail-value">{selectedStep.email}</span>
+                    </div>
+                  )}
+                  <div className="detail-item">
+                    <span className="detail-label">Type</span>
+                    <span className="detail-value">{LEAVE_TYPE_LABELS[selectedStep.leave_type] ?? selectedStep.leave_type}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Dates</span>
+                    <span className="detail-value">
+                      {formatDate(selectedStep.start_date)}
+                      {selectedInfo.endDate ? ` → ${formatDate(selectedInfo.endDate)}` : ''} ({selectedStep.duration} j)
+                    </span>
+                  </div>
+                  {selectedStep.reason_type && (
+                    <div className="detail-item">
+                      <span className="detail-label">Motif</span>
+                      <span className="detail-value">{REASON_LABELS[selectedStep.reason_type] ?? selectedStep.reason_type}</span>
+                    </div>
+                  )}
+                  {selectedInfo.creatorName && (
+                    <div className="detail-item">
+                      <span className="detail-label">Créée par</span>
+                      <span className="detail-value">
+                        {selectedInfo.creatorName}
+                        {selectedInfo.creatorRole ? ` (${selectedInfo.creatorRole})` : ''}
+                      </span>
+                    </div>
+                  )}
+                  {selectedStep.url_justification && (
+                    <div className="detail-item">
+                      <span className="detail-label">Pièce justificative</span>
+                      <span className="detail-value">
+                        <a
+                          href={`${api.defaults.baseURL}/request/${selectedStep.request_id}/document`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Ouvrir le document
+                        </a>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 {selectedStep.justification && (
-                  <p className="decision-row"><span className="decision-label">Justification :</span> {selectedStep.justification}</p>
+                  <div className="detail-item mt-3">
+                    <span className="detail-label">Justification</span>
+                    <span className="detail-value">{selectedStep.justification}</span>
+                  </div>
                 )}
-                {selectedStep.url_justification && (
-                  <p className="decision-row">
-                    <span className="decision-label">Pièce justificative :</span>{' '}
-                    <a
-                      href={`${api.defaults.baseURL}/request/${selectedStep.request_id}/document`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Ouvrir le document
-                    </a>
-                  </p>
-                )}
+
                 {selectedStep.leave_type === 'annual' && selectedStep.annualSplit && selectedStep.annualSplit.length > 0 && (
-                  <div className="decision-row">
-                    <span className="decision-label d-block mb-1">Répartition annuelle :</span>
-                    <div className="d-flex flex-wrap gap-2">
+                  <div className="detail-item mt-3">
+                    <span className="detail-label">Répartition annuelle</span>
+                    <div className="d-flex flex-wrap gap-2 mt-1">
                       {selectedStep.annualSplit.map((allocation, index) => (
                         <span key={`${selectedStep.request_id}-${index}`} className="split-badge">
                           Exercice {allocation.year} : {allocation.daysAllocated} j
@@ -307,12 +345,6 @@ function ApprovalInbox() {
                       ))}
                     </div>
                   </div>
-                )}
-                {selectedInfo.creatorName && (
-                  <p className="decision-row">
-                    <span className="decision-label">Créée par :</span> {selectedInfo.creatorName}
-                    {selectedInfo.creatorRole ? ` (${selectedInfo.creatorRole})` : ''}
-                  </p>
                 )}
               </div>
 
@@ -336,6 +368,9 @@ function ApprovalInbox() {
                   onClick={() => chooseDecision('approved')}
                   disabled={isActioning}
                 >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
                   Approuver
                 </button>
                 <button
@@ -345,6 +380,10 @@ function ApprovalInbox() {
                   onClick={() => chooseDecision('rejected')}
                   disabled={isActioning}
                 >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                   Rejeter
                 </button>
               </div>
@@ -400,7 +439,9 @@ function ApprovalInbox() {
                 <button
                   type="button"
                   className="btn confirm-btn px-4"
-                  style={{ background: decision === 'rejected' ? 'var(--danger)' : 'var(--success)' }}
+                  style={{
+                    background: decision === 'approved' ? 'var(--success)' : decision === 'rejected' ? 'var(--danger)' : 'var(--muted)'
+                  }}
                   onClick={handleConfirm}
                   disabled={!decision || isActioning}
                 >

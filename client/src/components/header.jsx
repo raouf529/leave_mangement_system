@@ -53,7 +53,7 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel, onRequestLeave 
 
     load();
     // Poll every 60 seconds (60000ms) for new notifications
-    const interval = setInterval(load, 60000);
+    const interval = setInterval(load, 30000);
 
     return () => {
       isMounted = false;
@@ -105,7 +105,7 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel, onRequestLeave 
     { to: '/approval-inbox', label: 'Boîte de réception', icon: 'inbox', show: canSeeSupervisorLinks },
     { to: '/admin', label: 'Administration', icon: 'admin', show: currentRole === 'admin' },
     { to: '/leave-titles', label: 'Titres de congé', icon: 'titles', show: ['hr', 'drh', 'admin'].includes(currentRole) },
-    { to: '/add-employee', label: 'Ajouter un employé', icon: 'addUser', show: ['hr', 'drh'].includes(currentRole) }
+    //{ to: '/add-employee', label: 'Ajouter un employé', icon: 'addUser', show: ['hr', 'drh'].includes(currentRole) }
   ].filter((item) => item.show);
 
   const bellButton = (
