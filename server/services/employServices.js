@@ -29,21 +29,29 @@ const employServices = {
                 nom, nom_jeune_fille, prenom, email,
                 date_entree, direction_id,
                 departement_id, service_id, matricule, 
-                fonction, role_leave_validation, can_create_for_employee, is_leave_responsible,
-                adminId // ID of the admin creating this user for logging
+                fonction,
+                adminId 
             } = employeeData;
+
+            const directionId = Number(direction_id);
+            if (!Number.isInteger(directionId) || directionId <= 0) {
+                const error = new Error('Une direction est obligatoire pour créer un employé.');
+                error.statusCode = 400;
+                throw error;
+            }
+            const [directions] = await db.query('SELECT id FROM Direction WHERE id = ?', [directionId]);
+            if (directions.length === 0) {
+                const error = new Error('La direction sélectionnée est introuvable.');
+                error.statusCode = 400;
+                throw error;
+            }
 
             // Use a constant password for MVP demo (will be communicated to users manually)
             const hashedPassword = await bcrypt.hash(DEFAULT_PASSWORD, 10);
             
-            const employeRoleLeaveValidation = role_leave_validation || 'employe';
-            if (!['employe', 'chef_service', 'chef_departement', 'directeur'].includes(employeRoleLeaveValidation)) {
-                const error = new Error('Invalid employee validation role');
-                error.statusCode = 400;
-                throw error;
-            }
-            const employeCanCreateForEmployee = can_create_for_employee ? 1 : 0;
-            const employeIsLeaveResponsible = is_leave_responsible ? 1 : 0;
+            const employeRoleLeaveValidation = 'employe';
+            const employeCanCreateForEmployee = 0;
+            const employeIsLeaveResponsible = 0;
 
             const [result] = await db.query(
                 `INSERT INTO Employe (
@@ -54,7 +62,7 @@ const employServices = {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
                 [
                     nom, nom_jeune_fille || null, prenom, email, hashedPassword,
-                    date_entree || new Date(), direction_id || null, departement_id || null,
+                    date_entree || new Date(), directionId, departement_id || null,
                     service_id || null, matricule, fonction || null,
                     employeCanCreateForEmployee, employeRoleLeaveValidation, employeIsLeaveResponsible
                 ]
@@ -130,6 +138,8 @@ const employServices = {
         }
     }
 };
+
+employServices.DEFAULT_PASSWORD = DEFAULT_PASSWORD;
 
 async function replaceChef(newEmployeeId, role_leave_validation, service_id, departement_id, direction_id) {
     let unitColumn = '';

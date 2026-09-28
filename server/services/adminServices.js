@@ -14,7 +14,7 @@ function monthsBetween(from, to) {
 }
 
 // month is 0-based (as returned by getMonth()); day 0 of next month = last day of this month (handles leap years)
-function getMonthEnd(year, month){
+function getMonthEnd(year, month) {
     return new Date(year, month + 1, 0).getDate();
 }
 
@@ -332,6 +332,8 @@ const adminServices = {
         };
     },
     async createExercise() {
+        //create an exercise for each employee if not exists
+
         try {
             const now = new Date();
             const year = getExerciseYearForDate(now);
@@ -539,7 +541,6 @@ const adminServices = {
             if (request[0].request_status !== 'pending') {
                 throw new Error(`Request '${RequestStep[0].request_id}' is not pending`);
             }
-            // extract all request with the same request_id, and check input step is las in order, if not throw an error
             const [requestSteps] = await pool.query(`SELECT * FROM Request_step WHERE request_id = ? ORDER BY step_order`, [RequestStep[0].request_id]);
             if (requestSteps.length === 0) {
                 throw new Error(`Request '${RequestStep[0].request_id}' has no steps`);
@@ -558,7 +559,8 @@ const adminServices = {
             throw new Error('Error updating request step target: ' + error.message);
         }
     },
-    async updateRequestStepDecision(stepId,decision){
+    async updateRequestStepDecision(stepId, decision) {
+        //update request step decision(not linked to client yet)
         try {
             const [RequestStep] = await pool.query(`SELECT * FROM Request_step WHERE step_id = ?`, [stepId]);
             if (RequestStep.length === 0) {
@@ -568,7 +570,6 @@ const adminServices = {
             if (request.length === 0) {
                 throw new Error(`Request '${RequestStep[0].request_id}' not found`);
             }
-            // ensure updated step is last in order
             const [requestSteps] = await pool.query(`SELECT * FROM Request_step WHERE request_id = ? ORDER BY step_order`, [RequestStep[0].request_id]);
             if (requestSteps.length === 0) {
                 throw new Error(`Request '${RequestStep[0].request_id}' has no steps`);
@@ -586,11 +587,11 @@ const adminServices = {
             throw new Error('Error updating request step decision: ' + error.message);
         }
     },
-    async assignCreateForOthers(EmpId, permission){
+    async assignCreateForOthers(EmpId, permission) {
         // this function use to give/revoke permission of create for other employee for chefs
         try {
             const [employee] = await pool.query(`SELECT * FROM Employe WHERE id = ?`, [EmpId]);
-            if(employee[0].role==='employe' || employee[0].role==='admin' || employee[0].role==='drh'){
+            if (employee[0].role === 'employe' || employee[0].role === 'admin' || employee[0].role === 'drh') {
                 throw new Error(`Employee '${EmpId}' is not authorized to create requests for others`);
             }
             await pool.query(`UPDATE Employe SET can_create_for_employee = ? WHERE id = ?`,
@@ -602,6 +603,7 @@ const adminServices = {
         }
     },
     async assignDRH(empId) {
+        // this function use to give/revoke permission of drh for other employee for chefs
         try {
             const [emp] = await pool.query('SELECT role_leave_validation FROM Employe WHERE id = ?', [empId]);
             if (emp.length === 0) {
@@ -617,63 +619,176 @@ const adminServices = {
             throw new Error('Error assigning DRH: ' + error.message);
         }
     },
-    async createMonthBalance(){
-    const results = { updated: [], skipped: [] };
-    try {
-        const [employees] = await pool.query(`SELECT * FROM Employe WHERE role_leave_validation != 'admin'`);
-        const year = getExerciseYearForDate(new Date());
-        const current_date = new Date();
+    async createMonthBalance() {
+        // create month balance for each employee for each exercise
+        const results = { updated: [], skipped: [] };
+        try {
+            const [employees] = await pool.query(`SELECT * FROM Employe WHERE role_leave_validation != 'admin'`);
+            const year = getExerciseYearForDate(new Date());
+            const current_date = new Date();
 
-        for (const employee of employees) {
-            try {
-                const recrutement_date = new Date(employee.date_entree);
+            for (const employee of employees) {
+                try {
+                    const recrutement_date = new Date(employee.date_entree);
 
-                const [exercise] = await pool.query(
-                    `SELECT * FROM Exercise WHERE Emp_id = ? AND year = ?`,
-                    [employee.id, year]
-                );
-                if (exercise.length === 0) {
-                    results.skipped.push({ empId: employee.id, reason: 'no exercise found' });
-                    continue;
+                    const [exercise] = await pool.query(
+                        `SELECT * FROM Exercise WHERE Emp_id = ? AND year = ?`,
+                        [employee.id, year]
+                    );
+                    if (exercise.length === 0) {
+                        results.skipped.push({ empId: employee.id, reason: 'no exercise found' });
+                        continue;
+                    }
+
+                    const isHiredThisMonth =
+                        recrutement_date.getMonth() === current_date.getMonth() &&
+                        recrutement_date.getFullYear() === current_date.getFullYear();
+
+                    let increment;
+                    if (isHiredThisMonth) {
+                        const attendanceDays =
+                            getMonthEnd(current_date.getFullYear(), current_date.getMonth()) -
+                            recrutement_date.getDate() + 1;
+                        increment = assignBalance(attendanceDays);
+                    } else {
+                        increment = 2.5;
+                    }
+
+                    await pool.query(
+                        `UPDATE Exercise SET balance = balance + ? WHERE exercise_id = ?`,
+                        [increment, exercise[0].exercise_id]
+                    );
+                    results.updated.push({ empId: employee.id, increment });
+                } catch (innerError) {
+                    results.skipped.push({ empId: employee.id, reason: innerError.message });
                 }
+            }
 
-                const isHiredThisMonth =
-                    recrutement_date.getMonth() === current_date.getMonth() &&
-                    recrutement_date.getFullYear() === current_date.getFullYear();
+            return { success: true, message: 'Month balance created successfully', ...results };
+        } catch (error) {
+            throw new Error('Error creating month balance: ' + error.message);
+        }
+    },
+    async getLogs() {
+        //get all logs
+        try {
+            const [logs] = await pool.query(`SELECT * FROM Logs ORDER BY action_timestamp DESC`);
+            return logs;
+        } catch (error) {
+            throw new Error('Error getting logs: ' + error.message);
+        }
+    },
+    async createCurrentExerciseForEmployee(empId) {
+        // this function is used to create current exercise for an employee if not exists
+        const now = new Date();
+        const year = getExerciseYearForDate(now);
 
-                let increment;
-                if (isHiredThisMonth) {
-                    const attendanceDays =
-                        getMonthEnd(current_date.getFullYear(), current_date.getMonth()) -
-                        recrutement_date.getDate() + 1;
-                    increment = assignBalance(attendanceDays);
-                } else {
-                    increment = 2.5;
-                }
+        const [empRows] = await pool.query(
+            `SELECT id, date_entree FROM Employe WHERE id = ?`, [empId]
+        );
+        if (!empRows.length) throw new Error(`Employé introuvable : ${empId}`);
 
+        const employee = empRows[0];
+        const hireDate = new Date(employee.date_entree);
+        const hiredThisExercise = getExerciseYearForDate(hireDate) === year;
+
+        const balance = hiredThisExercise
+            ? calculateInitialBalance(hireDate, now)
+            : assignContinuingBalance(year, now);
+
+        await pool.query(
+            `INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE balance = VALUES(balance)`,
+            [empId, year, balance]
+        );
+        const [exRows] = await pool.query(
+            `SELECT exercise_id FROM Exercise WHERE Emp_id = ? AND year = ?`, [empId, year]
+        );
+        const exerciseId = exRows[0]?.exercise_id;
+        if (exerciseId) {
+            const [advRows] = await pool.query(
+                `SELECT COALESCE(SUM(rea.days_allocated), 0) AS adv
+                 FROM Leave_request lr
+                 JOIN Request_exercise_allocation rea ON rea.request_id = lr.request_id
+                 WHERE lr.Emp_id = ? AND lr.exercise = ? AND lr.leave_type = 'advance'
+                   AND lr.request_status = 'approved' AND rea.exercise_id = ?`,
+                [empId, year, exerciseId]
+            );
+            const adv = Number(advRows[0]?.adv) || 0;
+            if (adv > 0) {
                 await pool.query(
-                    `UPDATE Exercise SET balance = balance + ? WHERE exercise_id = ?`,
-                    [increment, exercise[0].exercise_id]
+                    `UPDATE Exercise SET balance = balance - ? WHERE exercise_id = ?`,
+                    [adv, exerciseId]
                 );
-                results.updated.push({ empId: employee.id, increment });
-            } catch (innerError) {
-                results.skipped.push({ empId: employee.id, reason: innerError.message });
             }
         }
 
-        return { success: true, message: 'Month balance created successfully', ...results };
-    } catch (error) {
-        throw new Error('Error creating month balance: ' + error.message);
-    }
-},
-async getLogs(){
-    try {
-        const [logs] = await pool.query(`SELECT * FROM Logs ORDER BY action_timestamp DESC`);
-        return logs;
-    } catch (error) {
-        throw new Error('Error getting logs: ' + error.message);
-    }
-}
+        return { year, balance, exerciseId };
+    },
+
+    async manageExercise({ empId, year, balance, adminId }) {
+        // this function is used to manage exercise for an employee
+        const now = new Date();
+        const currentYear = getExerciseYearForDate(now);
+
+        if (!Number.isInteger(year))
+            throw new Error('L\'année doit être un entier.');
+        if (year > currentYear)
+            throw new Error(`L'année ne peut pas être dans le futur (max : ${currentYear}).`);
+        if (!Number.isFinite(balance) || balance < 0 || balance > 30)
+            throw new Error('Le solde doit être compris entre 0 et 30.');
+
+        const [empRows] = await pool.query(
+            `SELECT nom, prenom, date_entree FROM Employe WHERE id = ?`, [empId]
+        );
+        if (!empRows.length) throw new Error(`Employé introuvable : ${empId}`);
+        const emp = empRows[0];
+
+        const hireYear = getExerciseYearForDate(new Date(emp.date_entree));
+        if (year < hireYear)
+            throw new Error(`L'année d'exercice ne peut pas être antérieure à l'année de recrutement (${hireYear}).`);
+
+        // Upsert the exercise
+        const [existing] = await pool.query(
+            `SELECT exercise_id FROM Exercise WHERE Emp_id = ? AND year = ?`, [empId, year]
+        );
+        let action;
+        if (existing.length) {
+            await pool.query(
+                `UPDATE Exercise SET balance = ? WHERE Emp_id = ? AND year = ?`,
+                [balance, empId, year]
+            );
+            action = 'update';
+        } else {
+            await pool.query(
+                `INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, NOW())`,
+                [empId, year, balance]
+            );
+            action = 'create';
+        }
+
+        const empFullName = `${emp.prenom} ${emp.nom}`;
+        const detail = `[ADMIN] Exercice ${year} ${action === 'create' ? 'créé' : 'mis à jour'} pour ${empFullName} — solde : ${balance} j (par admin id=${adminId})`;
+
+        await pool.query(
+            `INSERT INTO Logs (emp_id, action_type, details) VALUES (?, ?, ?)`,
+            [empId, action === 'create' ? 'CREATE_EXERCISE' : 'UPDATE_EXERCISE', detail]
+        );
+
+        const [hrRows] = await pool.query(
+            `SELECT id FROM Employe WHERE is_leave_responsible = 1`
+        );
+        if (hrRows.length) {
+            const notifContent = `⚠️ Modification d'exercice : ${detail}`;
+            const insertValues = hrRows.map(h => [h.id, null, notifContent]);
+            await pool.query(
+                `INSERT INTO Notification (target_id, request_id, content) VALUES ?`,
+                [insertValues]
+            );
+        }
+
+        return { success: true, action, year, balance };
+    },
 };
 
 module.exports = adminServices;

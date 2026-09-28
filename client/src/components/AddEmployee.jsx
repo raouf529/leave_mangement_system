@@ -9,22 +9,10 @@ const INITIAL_FORM = {
   prenom: '',
   email: '',
   date_entree: new Date().toISOString().slice(0, 10),
-  matricule: '',
-  fonction: '',
   direction_id: '',
   departement_id: '',
   service_id: '',
-  role_leave_validation: 'employe',
-  can_create_for_employee: false,
-  is_leave_responsible: false,
 };
-
-const VALIDATION_ROLES = [
-  ['employe', 'Employé'],
-  ['chef_service', 'Chef de service'],
-  ['chef_departement', 'Chef de département'],
-  ['directeur', 'Directeur'],
-];
 
 function FormField({ label, name, value, onChange, required = false, type = 'text', children }) {
   return (
@@ -80,18 +68,18 @@ function AddEmployee() {
 
   const departments = form.direction_id
     ? org.departements.filter((item) => String(item.direction_id) === form.direction_id)
-    : org.departements;
+    : [];
   const services = org.services.filter((item) => {
     if (form.direction_id && String(item.direction_id) !== form.direction_id) return false;
     return !form.departement_id || !item.departement_id || String(item.departement_id) === form.departement_id;
   });
 
   function handleChange(event) {
-    const { name, value, type, checked } = event.target;
+    const { name, value } = event.target;
     setFeedback(null);
     setForm((current) => ({
       ...current,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: value,
       ...(name === 'direction_id' ? { departement_id: '', service_id: '' } : {}),
       ...(name === 'departement_id' ? { service_id: '' } : {}),
     }));
@@ -104,15 +92,22 @@ function AddEmployee() {
 
     const payload = {
       ...form,
-      matricule: form.matricule ? Number(form.matricule) : null,
-      direction_id: form.direction_id || null,
-      departement_id: form.departement_id || null,
-      service_id: form.service_id || null,
+      direction_id: Number(form.direction_id),
+      departement_id: form.departement_id ? Number(form.departement_id) : null,
+      service_id: form.service_id ? Number(form.service_id) : null,
+      matricule: null,
+      fonction: null,
+      role_leave_validation: 'employe',
+      can_create_for_employee: false,
+      is_leave_responsible: false,
     };
 
     try {
       const response = await api.post('/employe/create', payload);
-      setFeedback({ type: 'success', text: `Employé créé avec succès (ID ${response.data.employeeId}).` });
+      setFeedback({
+        type: 'success',
+        text: `Employé créé (ID ${response.data.employeeId}). Mot de passe temporaire : ${response.data.temporaryPassword}`,
+      });
       setForm({ ...INITIAL_FORM, date_entree: new Date().toISOString().slice(0, 10) });
     } catch (error) {
       setFeedback({
@@ -147,46 +142,35 @@ function AddEmployee() {
             <FormField label="Nom de jeune fille" name="nom_jeune_fille" value={form.nom_jeune_fille} onChange={handleChange} required />
             <FormField label="Prénom" name="prenom" value={form.prenom} onChange={handleChange} required />
             <FormField label="Adresse e-mail" name="email" value={form.email} onChange={handleChange} type="email" required />
-            <FormField label="Matricule" name="matricule" value={form.matricule} onChange={handleChange} type="number" />
             <FormField label="Date d’entrée" name="date_entree" value={form.date_entree} onChange={handleChange} type="date" required />
-            <FormField label="Fonction" name="fonction" value={form.fonction} onChange={handleChange} />
           </div>
         </section>
 
         <section className="add-employee-section">
           <div className="add-employee-section-heading">
             <span>02</span>
-            <h2>Affectation et accès</h2>
+            <h2>Affectation</h2>
           </div>
           {orgError && <p className="add-employee-feedback error" role="alert">{orgError}</p>}
           <div className="add-employee-grid">
-            <FormField label="Direction" name="direction_id" value={form.direction_id} onChange={handleChange}>
-              <select id="direction_id" name="direction_id" value={form.direction_id} onChange={handleChange}>
+            <FormField label="Direction" name="direction_id" value={form.direction_id} onChange={handleChange} required>
+              <select id="direction_id" name="direction_id" value={form.direction_id} onChange={handleChange} required disabled={loadingOrg || Boolean(orgError)}>
                 <option value="">Sélectionner une direction</option>
                 {org.directions.map((item) => <option key={item.id} value={item.id}>{item.nom}</option>)}
               </select>
             </FormField>
             <FormField label="Département" name="departement_id" value={form.departement_id} onChange={handleChange}>
-              <select id="departement_id" name="departement_id" value={form.departement_id} onChange={handleChange}>
-                <option value="">Sélectionner un département</option>
+              <select id="departement_id" name="departement_id" value={form.departement_id} onChange={handleChange} disabled={!form.direction_id || loadingOrg || Boolean(orgError)}>
+                <option value="">Aucun département</option>
                 {departments.map((item) => <option key={item.id} value={item.id}>{item.nom}</option>)}
               </select>
             </FormField>
             <FormField label="Service" name="service_id" value={form.service_id} onChange={handleChange}>
-              <select id="service_id" name="service_id" value={form.service_id} onChange={handleChange}>
-                <option value="">Sélectionner un service</option>
+              <select id="service_id" name="service_id" value={form.service_id} onChange={handleChange} disabled={!form.direction_id || loadingOrg || Boolean(orgError)}>
+                <option value="">Aucun service</option>
                 {services.map((item) => <option key={item.id} value={item.id}>{item.nom}</option>)}
               </select>
             </FormField>
-            <FormField label="Rôle de validation" name="role_leave_validation" value={form.role_leave_validation} onChange={handleChange}>
-              <select id="role_leave_validation" name="role_leave_validation" value={form.role_leave_validation} onChange={handleChange}>
-                {VALIDATION_ROLES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </FormField>
-          </div>
-          <div className="add-employee-options">
-            <label><input type="checkbox" name="can_create_for_employee" checked={form.can_create_for_employee} onChange={handleChange} /> Peut créer des demandes pour son équipe</label>
-            <label><input type="checkbox" name="is_leave_responsible" checked={form.is_leave_responsible} onChange={handleChange} /> Responsable des congés</label>
           </div>
           {loadingOrg && <p className="add-employee-note">Chargement des directions et services…</p>}
         </section>

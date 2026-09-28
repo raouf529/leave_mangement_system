@@ -9,7 +9,7 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 20px;
-  box-shadow: 0 2px 4px rgba(27, 36, 48, 0.1);
+  box-shadow: 0 2px 4px rgba(30, 41, 59, 0.1);
 }
 
 .leave-titles-hero {
@@ -94,7 +94,7 @@
 }
 
 .leave-titles-table th {
-  background: #f5f8fb;
+  background: #f0f4fa;
   color: var(--muted);
   font-size: 0.78rem;
   text-transform: uppercase;
@@ -113,7 +113,7 @@
   padding: 1.5rem;
   border: 1px solid var(--border);
   border-radius: 16px;
-  background: #f5f8fb;
+  background: #f0f4fa;
 }
 
 .title-preview-grid {
@@ -153,7 +153,7 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.4rem 0;
-  border-bottom: 1px solid #edf1f5;
+  border-bottom: 1px solid #e2e8f0;
   font-size: 0.9rem;
 }
 

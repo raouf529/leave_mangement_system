@@ -39,7 +39,7 @@ const ROLE_LABELS = {
   employee: 'Employé'
 };
 
-const AVATAR_PALETTE = ['#1F5673', '#8A5300', '#13694D', '#5B5F97', '#B03A2E', '#4A6B82'];
+const AVATAR_PALETTE = ['#1e40af', '#1d4ed8', '#059669', '#6366f1', '#dc2626', '#0284c7'];
 
 function formatDate(dateStr) {
   if (!dateStr) return '—';
@@ -106,6 +106,7 @@ function EmployeesDashboard() {
   const [requestTargetId, setRequestTargetId] = useState(null);
   const [requestTargetName, setRequestTargetName] = useState('');
   const detailRequestRef = useRef(0);
+  const detailPanelRef = useRef(null);
 
   // Filters for employee's request history
   const [detailFilterStatus, setDetailFilterStatus] = useState('all');
@@ -190,6 +191,12 @@ function EmployeesDashboard() {
     setDetail(null);
     setDetailError('');
   }
+
+  useEffect(() => {
+    if (selectedId && detailPanelRef.current) {
+      detailPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [selectedId]);
 
   const activeExercises = (detail?.exercises ?? []).filter((ex) => Number(ex.balance) > 0);
   const leaveRequests = detail?.leaveRequests ?? [];
@@ -318,7 +325,7 @@ function EmployeesDashboard() {
 
         {/* Détails employé sélectionné */}
         {selectedId && (
-          <div className="section-card overflow-hidden">
+          <div className="section-card overflow-hidden" ref={detailPanelRef}>
             <div className="detail-panel-header d-flex align-items-center justify-content-between">
               <div className="d-flex align-items-center gap-3">
                 {detail && <Avatar id={detail.id} firstName={detail.firstName} lastName={detail.lastName} size={48} />}

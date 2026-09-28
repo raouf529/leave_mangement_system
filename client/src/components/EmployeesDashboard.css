@@ -1,19 +1,4 @@
 .leave-dashboard {
-  --ink: #1b2430;
-  --muted: #65707d;
-  --surface: #ffffff;
-  --canvas: #f5f7fa;
-  --border: #e4e8ed;
-  --primary: #1f5673;
-  --primary-hover: #184559;
-  --primary-soft: #e8f0f4;
-  --accent-amber: #8a5300;
-  --amber-soft: #fff3d6;
-  --success: #13694d;
-  --success-soft: #ddf3ea;
-  --danger: #b03a2e;
-  --danger-soft: #fbebe9;
-  --neutral-soft: #eef1f4;
   min-height: 100vh;
   background: var(--canvas);
   color: var(--ink);
@@ -123,7 +108,7 @@
 
 .leave-dashboard .form-control,
 .leave-dashboard .form-select {
-  border-color: #cdd4dc;
+  border-color: #cbd5e1;
   border-radius: 10px;
   color: var(--ink);
 }
@@ -131,7 +116,7 @@
 .leave-dashboard .form-control:focus,
 .leave-dashboard .form-select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16);
+  box-shadow: 0 0 0 0.2rem rgba(30, 64, 175, 0.16);
 }
 
 .leave-dashboard .form-check-input:checked {
@@ -241,7 +226,7 @@
 .leave-dashboard .alert-danger {
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid #ebc5c0;
+  border: 1px solid #fca5a5;
   border-radius: 10px;
 }
 

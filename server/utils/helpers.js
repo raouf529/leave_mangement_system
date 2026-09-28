@@ -19,7 +19,8 @@ function getRoleLabel(role) {
         chef_departement: 'Chef de département',
         chef_service: 'Chef de service',
         drh: 'Ressources humaines',
-        employe: 'Employé'
+        employe: 'Employé',
+        dg: 'Directeur Général'
     };
     return labels[role] ?? role;
 }

@@ -158,6 +158,33 @@ const adminController = {
             res.status(400).json({ error: error.message });
         }
     },
+    async createCurrentExerciseForEmployee(req, res) {
+        try {
+            const { empId } = req.body;
+            if (!empId) return res.status(400).json({ error: 'empId est requis.' });
+            const result = await adminServices.createCurrentExerciseForEmployee(Number(empId));
+            res.status(200).json({ message: 'Exercice courant créé/mis à jour avec succès.', ...result });
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
+    async manageExercise(req, res) {
+        try {
+            const { empId, year, balance } = req.body;
+            if (empId === undefined || year === undefined || balance === undefined) {
+                return res.status(400).json({ error: 'empId, year et balance sont requis.' });
+            }
+            const result = await adminServices.manageExercise({
+                empId: Number(empId),
+                year: Number(year),
+                balance: Number(balance),
+                adminId: req.user?.id,
+            });
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
     async getLogs(req, res) {
         try {
             const logs = await adminServices.getLogs();

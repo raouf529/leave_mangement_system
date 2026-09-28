@@ -17,15 +17,6 @@ const exerciseController = {
         } catch (error) {
             res.status(400).json({ error: error.message });
         }
-    },
-    async updateMonthAttendance(req, res) {
-        try {
-            const { employeeId, month, count, exercise } = req.body;
-            const result = await ExerciseService.updateMonthAttendance(employeeId, month, count, exercise);
-            res.status(200).json(result);
-        } catch (error) {
-            res.status(400).json({ error: error.message });
-        }
     }
 };
 

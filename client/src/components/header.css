@@ -21,7 +21,7 @@ body.has-sidebar {
   flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  box-shadow: 1px 0 2px rgba(27, 36, 48, 0.04);
+  box-shadow: 1px 0 2px rgba(30, 41, 59, 0.04);
 }
 
 .app-sidebar .sidebar-brand {
@@ -80,7 +80,7 @@ body.has-sidebar {
 }
 
 .app-sidebar .btn-request:hover {
-  background: #184559;
+  background: #1e3a8a;
 }
 
 .app-sidebar .btn-request:focus-visible {
@@ -269,7 +269,7 @@ body.has-sidebar {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(27, 36, 48, 0.12);
+  box-shadow: 0 12px 32px rgba(30, 41, 59, 0.12);
 }
 
 .notif-panel .notif-head {
@@ -376,7 +376,7 @@ body.has-sidebar {
 
   .app-sidebar.open {
     transform: translateX(0);
-    box-shadow: 0 0 40px rgba(27, 36, 48, 0.25);
+    box-shadow: 0 0 40px rgba(30, 41, 59, 0.25);
   }
 
   .app-sidebar .sidebar-bell {
@@ -388,7 +388,7 @@ body.has-sidebar {
     position: fixed;
     inset: 0;
     z-index: 1025;
-    background: rgba(27, 36, 48, 0.4);
+    background: rgba(30, 41, 59, 0.4);
   }
 
   .notif-panel {

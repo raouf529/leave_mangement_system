@@ -12,17 +12,13 @@ try {
 
 const backgroundService = {
     // check expired leave requests and update their status to 'time out'.
-    // end_date is NOT stored in the DB — it is computed as start_date + duration days.
-    // A request is considered expired when its last day is strictly in the past.
+    // A request is considered expired when its first day is strictly in the past.
     async checkExpiredLeaveRequests() {
         try {
-            // DATE_ADD(start_date, INTERVAL duration - 1 DAY) gives the inclusive last day
-            // of the leave (e.g. start 2026-01-01, duration 3 → last day 2026-01-03).
-            // We mark it as timed-out when that last day is before today.
             const [expiredRequests] = await pool.query(
                 `SELECT request_id, Emp_id FROM Leave_request
                  WHERE request_status = 'pending'
-                   AND DATE_ADD(start_date, INTERVAL (duration - 1) DAY) < CURDATE()`
+                   AND start_date < CURDATE()`
             );
             for (const request of expiredRequests) {
                 await pool.query(
@@ -53,13 +49,10 @@ const backgroundService = {
                     );
 
                     if (existingExercise.length === 0) {
-                        // INSERT IGNORE: if admin created this row concurrently, silently skip instead of erroring.
-                        // Requires a UNIQUE key on (Emp_id, year) in Exercise to actually take effect.
                         await pool.query(
                             `INSERT IGNORE INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, 0, NOW())`,
                             [employee.id, exerciseYear]
                         );
-                        // insert log
                         await createLog(employee.id, 'CREATE_EXERCISE', `Exercice ${exerciseYear} créé automatiquement (solde initial: 0).`);
                     }
                 }
@@ -68,8 +61,7 @@ const backgroundService = {
             throw new Error('Error creating new exercise: ' + error.message);
         }
     },
-    // Executed on the 1st of each month:
-    // Adds 2.5 balance for each employee
+    // Executed on the 1st of each month: Adds 2.5 balance for each employee
     async updateExerciseBalances() {
         try {
             const [employees] = await pool.query(`SELECT id, date_entree FROM Employe WHERE role_leave_validation != 'admin'`);
@@ -78,10 +70,6 @@ const backgroundService = {
 
             for (const employee of employees) {
                 let balanceToAdd = 2.5;
-
-                // Ensure an Exercise record exists for this exercise year, then add the balance.
-                // INSERT IGNORE + always-UPDATE is safe whether or not admin already created the row
-                // concurrently (requires a UNIQUE key on (Emp_id, year) in Exercise to actually dedupe).
                 await pool.query(
                     `INSERT IGNORE INTO Exercise (Emp_id, year, balance) VALUES (?, ?, 0)`,
                     [employee.id, exerciseYear]
@@ -90,9 +78,7 @@ const backgroundService = {
                     `UPDATE Exercise SET balance = balance + ? WHERE Emp_id = ? AND year = ?`,
                     [balanceToAdd, employee.id, exerciseYear]
                 );
-                // insert log
                 await createLog(employee.id, 'UPDATE_EXERCISE', `Solde de l'exercice ${exerciseYear} mis à jour (+${balanceToAdd} jours).`);
-                // Create notification for employee
                 await createNotification({
                     targetId: employee.id,
                     requestId: null,
@@ -108,10 +94,9 @@ const backgroundService = {
 backgroundService.autoupdateExercse = backgroundService.updateExerciseBalances;
 
 // Runs on the 1st of every month. In July (fiscal year start), also creates the
-// new exercise-year rows before crediting the monthly balance.
 backgroundService.runMonthlyJob = async function runMonthlyJob() {
     const now = new Date();
-    if (now.getMonth() === 6) { // July, JS months are 0-indexed
+    if (now.getMonth() === 6) { 
         await backgroundService.createNewExercise();
     }
     await backgroundService.updateExerciseBalances();

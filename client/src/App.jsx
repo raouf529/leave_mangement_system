@@ -4,6 +4,7 @@ import Login from './components/login.jsx'
 import Dashboard from './components/dashboard.jsx'
 import UnitDashboard from './components/EmployeesDashboard.jsx'
 import ApprovalInbox from './components/ApprovalInbox.jsx'
+import DgInbox from './components/Dginbox.jsx'
 import AdminDashboard from './components/AdminDashboard.jsx'
 import EmployeeDetails from './components/EmployeeDetails.jsx'
 import LeaveTitles from './components/LeaveTitles.jsx'
@@ -35,6 +36,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/unit-info" element={<ProtectedRoute allowedRoles={['head', 'hr', 'drh', 'admin']}><UnitDashboard /></ProtectedRoute>} />
         <Route path="/approval-inbox" element={<ProtectedRoute allowedRoles={['head', 'hr', 'drh', 'admin']}><ApprovalInbox /></ProtectedRoute>} />
+        <Route path="/dg-inbox" element={<DgInbox />} />
         <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/employees/:employeeId" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><EmployeeDetails /></ProtectedRoute>} />
         <Route path="/leave-titles" element={<ProtectedRoute allowedRoles={['admin', 'hr', 'drh']}><LeaveTitles /></ProtectedRoute>} />

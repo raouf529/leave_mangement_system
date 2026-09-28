@@ -2,6 +2,7 @@ const pool = require('../db');
 
 const notificationService = {
     async getNotificationsByEmployeeId(employeeId) {
+        // Return notifications for a specific employee
         try {
             const [rows] = await pool.query(
                 'SELECT * FROM Notification WHERE target_id = ? ORDER BY created_at DESC',
@@ -13,6 +14,7 @@ const notificationService = {
         }
     },
     async markNotificationAsRead(notificationId, employeeId) {
+        // Mark notification as read
         try {
             const [result] = await pool.query(
                 'UPDATE Notification SET is_read = true WHERE notification_id = ? AND target_id = ?',

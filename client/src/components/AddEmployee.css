@@ -1,16 +1,16 @@
 .add-employee-page {
-	--add-ink: #173435;
-	--add-muted: #566c6c;
-	--add-line: #d1e1dd;
-	--add-petrol: #145c58;
-	--add-petrol-hover: #0f4542;
-	--add-clay: #a8432e;
-	--add-clay-soft: #fae9df;
-	--add-coral-hover: #843522;
+	--add-ink: #1e293b;
+	--add-muted: #64748b;
+	--add-line: #d1d9e6;
+	--add-petrol: #1e40af;
+	--add-petrol-hover: #1e3a8a;
+	--add-clay: #3b82f6;
+	--add-clay-soft: #eff6ff;
+	--add-coral-hover: #1d4ed8;
 	min-height: 100vh;
 	padding: clamp(1.25rem, 4vw, 3.5rem);
 	color: var(--add-ink);
-	background: linear-gradient(135deg, #f4f8f5 0%, #e8f1ee 100%);
+	background: linear-gradient(135deg, #f0f4fa 0%, #e0f2fe 100%);
 }
 
 .add-employee-header,
@@ -28,15 +28,15 @@
 	padding: 1.5rem 1.75rem;
 	border-radius: 8px;
 	color: #fff;
-	background: linear-gradient(112deg, #163e48 0%, #145c58 100%);
-	box-shadow: 0 8px 22px rgb(20 70 72 / 16%);
+	background: linear-gradient(112deg, #1e3a8a 0%, #1e40af 100%);
+	box-shadow: 0 8px 22px rgb(30 64 175 / 16%);
 	max-width: 1080px;
 	margin: 0 auto 1.5rem;
 }
 
 .add-employee-eyebrow {
 	margin: 0 0 0.35rem;
-	color: #ffc27a;
+	color: #93c5fd;
 	font-size: 0.76rem;
 	font-weight: 700;
 	text-transform: uppercase;
@@ -88,7 +88,7 @@
 	padding: clamp(1rem, 3vw, 1.5rem);
 	border: 1px solid var(--add-line);
 	border-radius: 8px;
-	box-shadow: 0 5px 18px rgb(23 52 53 / 4%);
+	box-shadow: 0 5px 18px rgb(30 41 59 / 4%);
 	background: #fff;
 }
 
@@ -150,7 +150,7 @@
 	width: 100%;
 	min-height: 43px;
 	padding: 0.6rem 0.7rem;
-	border: 1px solid #c4d4d0;
+	border: 1px solid #cbd5e1;
 	border-radius: 5px;
 	color: var(--add-ink);
 	background: #fff;
@@ -161,7 +161,7 @@
 .add-employee-field input:focus,
 .add-employee-field select:focus {
 	border-color: var(--add-petrol);
-	outline: 2px solid rgb(20 92 88 / 16%);
+	outline: 2px solid rgb(30 64 175 / 16%);
 }
 
 .add-employee-required {
@@ -203,13 +203,13 @@
 }
 
 .add-employee-feedback.error {
-	color: #8f2e25;
-	background: #fbebe9;
+	color: #991b1b;
+	background: #fee2e2;
 }
 
 .add-employee-feedback.success {
-	color: #105b42;
-	background: #ddf3ea;
+	color: #065f46;
+	background: #d1fae5;
 }
 
 .add-employee-actions {

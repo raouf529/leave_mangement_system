@@ -33,7 +33,11 @@ const employeController = {
             const adminId = req.user ? req.user.id : null;
             const employeeData = { ...req.body, adminId };
             const newEmployeeId = await employServices.createEmployee(employeeData);
-            res.status(201).json({ success: true, employeeId: newEmployeeId });
+            res.status(201).json({
+                success: true,
+                employeeId: newEmployeeId,
+                temporaryPassword: employServices.DEFAULT_PASSWORD
+            });
         } catch (error) {
             console.error('Error creating employee:', error);
             res.status(error.statusCode || 500).json({ error: error.message || 'Failed to create employee' });

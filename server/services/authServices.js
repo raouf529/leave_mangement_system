@@ -48,13 +48,11 @@ const authService = {
         const { accessToken, refreshToken } = generateTokens(user);
         return { accessToken, refreshToken, role: mapRole(user.role_leave_validation, user.is_leave_responsible), roleLabel: getRoleLabel(user.role_leave_validation) };
     },
-
     // Used by the refresh endpoint to rebuild a fresh access token payload
     // (role/unit could have changed since the refresh token was issued).
     async getEmployeeById(id) {
         return getEmployeeById(id);
     },
-
     verifyRefreshToken,
     generateTokens,
 };

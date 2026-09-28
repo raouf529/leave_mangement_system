@@ -24,7 +24,7 @@ const ROLE_LABELS = {
   employe: 'Employé',
 };
 
-const AVATAR_PALETTE = ['#1F5673', '#C98A2C', '#3E8A5F', '#6C5CE7', '#C1544A', '#2D9CDB'];
+const AVATAR_PALETTE = ['#1e40af', '#3b82f6', '#059669', '#7c3aed', '#dc2626', '#0ea5e9'];
 
 /* ─── Utilities ─── */
 function initialsOf(firstName, lastName) {
@@ -192,7 +192,6 @@ function InputModal({ open, title, fields, onConfirm, onCancel }) {
   );
 }
 
-/* ─── Shared mini-components ─── */
 function Avatar({ id, firstName, lastName, size = 36 }) {
   return (
     <span
@@ -456,24 +455,17 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleCreateExerciseIndividual = async (emp) => {
-    const values = await openInput({
-      title: `Créer un exercice — ${emp.firstName} ${emp.lastName}`,
-      fields: [
-        { name: 'year',    label: "Année",         type: 'number', defaultValue: String(new Date().getFullYear()), placeholder: 'ex: 2026', required: true },
-        { name: 'balance', label: 'Solde initial', type: 'number', defaultValue: '0',                              placeholder: 'ex: 0',    required: true },
-      ],
-    });
-    if (!values) return;
+  const [creatingExerciseFor, setCreatingExerciseFor] = useState(null);
+
+  const handleCreateCurrentExercise = async (emp) => {
+    setCreatingExerciseFor(emp.id);
     try {
-      await api.post('/admin/create-exercise-by-id', {
-        empId: emp.id,
-        year: Number(values.year),
-        balance: Number(values.balance),
-      });
-      toast(`Exercice ${values.year} créé avec succès pour ${emp.firstName} ${emp.lastName}.`, 'success');
+      await api.post('/admin/create-current-exercise-by-id', { empId: emp.id });
+      toast(`Exercice courant créé/mis à jour pour ${emp.firstName} ${emp.lastName}.`, 'success');
     } catch (e) {
       toast(e.response?.data?.error || e.message, 'error');
+    } finally {
+      setCreatingExerciseFor(null);
     }
   };
 
@@ -617,9 +609,16 @@ export default function AdminDashboard() {
 
                               <button
                                 className="btn btn-sm btn-outline-info"
-                                onClick={() => handleCreateExerciseIndividual(emp)}
+                                onClick={() => handleCreateCurrentExercise(emp)}
+                                disabled={creatingExerciseFor === emp.id}
+                                title="Créer/recalculer l'exercice courant (même logique que le job global)"
                               >
-                                Créer Ex.
+                                {creatingExerciseFor === emp.id ? (
+                                  <>
+                                    <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" />
+                                    Ex. cours…
+                                  </>
+                                ) : 'Ex. courant'}
                               </button>
                             </div>
                           </td>

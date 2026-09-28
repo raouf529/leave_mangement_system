@@ -130,9 +130,6 @@ async function refundApprovedAllocations(requestId, daysToRefund, conn = pool) {
         return;
     }
 
-    // Refund starting from the most recently-used exercise first: for a multi-exercise
-    // annual split (oldest exercise filled first), the last exercise filled covers the
-    // later portion of the leave, which lines up with the not-yet-taken days being refunded.
     const [allocations] = await conn.query(
         `SELECT ra.exercise_id, SUM(ra.days_allocated) AS total_days
          FROM Request_exercise_allocation ra

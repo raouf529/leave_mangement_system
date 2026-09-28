@@ -36,7 +36,7 @@
 .reject-note {
   background: var(--danger-soft);
   color: var(--danger);
-  border: 1px solid #ebc5c0;
+  border: 1px solid #fca5a5;
   border-radius: 10px;
   padding: 0.85rem 1rem;
   font-size: 0.92rem;
@@ -74,7 +74,6 @@
 
 .exercise-card.current {
   border-color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .exercise-name {
@@ -117,7 +116,7 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(27, 36, 48, 0.08);
+  box-shadow: 0 1px 2px rgba(30, 41, 59, 0.08);
 }
 
 .leave-dashboard .info-btn {
@@ -152,7 +151,7 @@
 
 .leave-dashboard .form-control,
 .leave-dashboard .form-select {
-  border-color: #cdd4dc;
+  border-color: #cbd5e1;
   border-radius: 10px;
   color: var(--ink);
 }
@@ -160,7 +159,7 @@
 .leave-dashboard .form-control:focus,
 .leave-dashboard .form-select:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 0.2rem rgba(31, 86, 115, 0.16);
+  box-shadow: 0 0 0 0.2rem rgba(30, 64, 175, 0.16);
 }
 
 .leave-dashboard .form-check-input:checked {
@@ -232,7 +231,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(27, 36, 48, 0.5);
+  background: rgba(30, 41, 59, 0.5);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -243,7 +242,7 @@
 .custom-modal {
   background: var(--surface);
   border-radius: 16px;
-  box-shadow: 0 20px 40px -12px rgba(27, 36, 48, 0.25);
+  box-shadow: 0 20px 40px -12px rgba(30, 41, 59, 0.25);
   max-width: 480px;
   width: 90%;
   overflow: hidden;
@@ -263,8 +262,8 @@
 
 .warn-note {
   background: var(--amber-soft);
-  border: 1px solid #e8cd8a;
-  color: #6b4300;
+  border: 1px solid #93c5fd;
+  color: #1d4ed8;
   border-radius: 10px;
   padding: 0.85rem 1rem;
   font-size: 0.9rem;

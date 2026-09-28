@@ -109,7 +109,7 @@ const profileService = {
             roleLabel: getRoleLabel(employee.role_leave_validation),
             recrutement_date: employee.date_entree,
             unit,
-            exercises: exercises.map(ex => ({ exercise: ex.year, balance: ex.balance })),
+            exercises: exercises.map(ex => ({ year: ex.year, balance: ex.balance })),
             leaveRequests: leaveRequests.map(lr => {
                 const currentStep = currentStepByRequest[lr.request_id];
                 const rejectedStep = rejectedStepByRequest[lr.request_id];
@@ -309,6 +309,7 @@ const profileService = {
 
 
     async getAllEmployees(options = {}) {
+        // retun informations for all employess
         const page = options.page ? Math.max(1, parseInt(options.page, 10) || 1) : null;
         const limit = options.limit ? Math.max(1, parseInt(options.limit, 10) || 10) : null;
         const search = String(options.search ?? '').trim();
