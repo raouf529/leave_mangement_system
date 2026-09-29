@@ -9,8 +9,10 @@ import AdminDashboard from './components/AdminDashboard.jsx'
 import EmployeeDetails from './components/EmployeeDetails.jsx'
 import LeaveTitles from './components/LeaveTitles.jsx'
 import AddEmployee from './components/AddEmployee.jsx'
+import EmployeeProfile from './components/EmployeeProfile.jsx'
+import ManualLeaveEntry from './components/ManualLeaveEntry.jsx'
 
-function ProtectedRoute({ children, allowedRoles }) {
+function ProtectedRoute({ children, allowedRoles, roleRedirects = {} }) {
   const { loading, user, role } = useCurrentUser();
 
   if (loading) {
@@ -19,6 +21,10 @@ function ProtectedRoute({ children, allowedRoles }) {
 
   if (!user) {
     return <Navigate to="/" replace />;
+  }
+
+  if (roleRedirects[role]) {
+    return <Navigate to={roleRedirects[role]} replace />;
   }
 
   if (allowedRoles && !allowedRoles.includes(role)) {
@@ -33,7 +39,10 @@ function App() {
     <div className="App">
       <Routes>
         <Route path="/" element={<Login />} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute roleRedirects={{ dg: '/dg-inbox' }}><Dashboard /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute allowedRoles={['employee', 'head', 'hr', 'dg']} roleRedirects={{ admin: '/admin' }}><EmployeeProfile /></ProtectedRoute>} />
+        <Route path="/hr/manual-leave" element={<ProtectedRoute allowedRoles={['hr']}><ManualLeaveEntry /></ProtectedRoute>} />
+        <Route path="/hr/employees" element={<ProtectedRoute allowedRoles={['hr']}><UnitDashboard companyWide /></ProtectedRoute>} />
         <Route path="/unit-info" element={<ProtectedRoute allowedRoles={['head', 'hr', 'drh', 'admin']}><UnitDashboard /></ProtectedRoute>} />
         <Route path="/approval-inbox" element={<ProtectedRoute allowedRoles={['head', 'hr', 'drh', 'admin']}><ApprovalInbox /></ProtectedRoute>} />
         <Route path="/dg-inbox" element={<DgInbox />} />

@@ -42,6 +42,17 @@ const profileController = {
         catch (error) {
             res.status(400).json({ error: error.message });
         }
+    },
+    async getCompanyEmployees(req, res) {
+        try {
+            const employees = await profileServices.getAllEmployees({
+                ...req.query,
+                excludePrivileged: true
+            });
+            res.status(200).json(employees);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
     }
 };
 

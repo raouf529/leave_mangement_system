@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from './api';
+import Header from './header';
 import './AddEmployee.css';
 
 const INITIAL_FORM = {
@@ -120,11 +121,14 @@ function AddEmployee() {
   }
 
   return (
-    <main className="add-employee-page">
+    <div className="add-employee-page">
+      <Header />
+      <main className="container py-4 py-md-5 add-employee-main">
       <header className="add-employee-header">
         <div>
           <p className="add-employee-eyebrow">Gestion du personnel</p>
           <h1>Ajouter un employé</h1>
+          <p className="text-secondary mb-0 mt-1">Renseignez les informations personnelles et l’affectation de l’employé.</p>
         </div>
         <button type="button" className="add-employee-back" onClick={() => navigate(-1)}>
           Retour
@@ -184,7 +188,8 @@ function AddEmployee() {
           </button>
         </footer>
       </form>
-    </main>
+      </main>
+    </div>
   );
 }
 

@@ -168,7 +168,7 @@ function DgInbox() {
 
   return (
     <div className="leave-dashboard">
-      <Header hideDashboard />
+      <Header hideDashboard pendingInboxCount={steps.length} />
 
       <main className="container py-4 py-md-5">
         <div className="mb-4">
@@ -209,9 +209,16 @@ function DgInbox() {
                             <div>
                               <div className="fw-semibold">{info.fullName}</div>
                               <div className="cell-sub">{step.fonction || 'Fonction non renseignée'}</div>
-                              <div className="cell-sub">
-                                {step.matricule ? `Matricule ${step.matricule}` : ''}
-                                {info.createdForSomeoneElse ? `${step.matricule ? ' · ' : ''}Créée par ${info.creatorName}` : ''}
+                              <div className="cell-sub d-flex flex-wrap align-items-center gap-1 inbox-employee-meta">
+                                {step.matricule && <span>Matricule {step.matricule}</span>}
+                                {info.createdForSomeoneElse && (
+                                  <span className="badge rounded-pill bg-light text-secondary border fw-normal">
+                                    Créée par {info.creatorRole || 'un responsable'}
+                                  </span>
+                                )}
+                                {(step.created_at || step.createdAt || step.submission_date) && (
+                                  <span>Soumise le {formatDate(step.created_at || step.createdAt || step.submission_date)}</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -224,13 +231,13 @@ function DgInbox() {
                         </td>
                         <td>
                           {info.isDirectTarget ? (
-                            <span className="mini-badge" style={{ background: 'var(--amber-soft)', color: 'var(--accent-amber)' }}>
+                            <span className="mini-badge" style={{ background: '#fef3c7', color: '#92400e' }}>
                               Assignée à vous
                             </span>
                           ) : (
                             <>
-                              <div className="fw-medium">{info.targetName || info.targetRole}</div>
-                              {info.targetName && <div className="cell-sub">{info.targetRole}</div>}
+                              <div className="fw-medium">En attente de {info.targetName || info.targetRole}</div>
+                              <div className="cell-sub">Cette étape peut être passée par un supérieur.</div>
                             </>
                           )}
                         </td>
@@ -350,7 +357,7 @@ function DgInbox() {
 
               <div
                 className="step-box"
-                style={{ background: selectedInfo.isDirectTarget ? 'var(--amber-soft)' : 'var(--neutral-soft)' }}
+                style={{ background: selectedInfo.isDirectTarget ? '#fef3c7' : 'var(--neutral-soft)' }}
               >
                 <strong>Étape actuelle :</strong> {selectedInfo.targetRole}{selectedInfo.targetName ? ` — ${selectedInfo.targetName}` : ''}
                 <span className="muted-note d-block">

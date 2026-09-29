@@ -3,6 +3,37 @@ const fs = require('fs');
 const path = require('path');
 
 const requestController = {
+    async getEmployeeForManualRequest(req, res) {
+        try {
+            const employee = await requestService.getEmployeeForManualRequest(req.params.matricule);
+            res.status(200).json(employee);
+        } catch (error) {
+            res.status(404).json({ error: error.message });
+        }
+    },
+
+    async createManualRequest(req, res) {
+        try {
+            const result = await requestService.createManualLeaveRequest({
+                hrId: req.user?.id,
+                matricule: req.body.matricule,
+                startDate: req.body.startDate,
+                endDate: req.body.endDate,
+                leaveType: req.body.leaveType,
+                reasonType: req.body.reasonType,
+                justification: req.body.justification,
+                url: req.file ? `/uploads/justifications/${req.file.filename}` : null,
+                status: req.body.status
+            });
+            res.status(201).json({ message: 'Demande saisie manuellement avec succès.', ...result });
+        } catch (error) {
+            if (req.file) {
+                fs.unlink(req.file.path, () => {});
+            }
+            res.status(400).json({ error: error.message });
+        }
+    },
+
     async createRequest(req, res) {
         try {
             const employeeId = req.user?.id;

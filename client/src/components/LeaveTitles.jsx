@@ -93,6 +93,7 @@ export default function LeaveTitles() {
   const [search, setSearch] = useState('');
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
   const [error, setError] = useState('');
   const [titles, setTitles] = useState({});
   async function searchRequests(event) {
@@ -103,6 +104,7 @@ export default function LeaveTitles() {
       const response = await api.get('/admin/leave-titles', { params: { search } });
       setRequests(response.data ?? []);
       setTitles({});
+      setHasSearched(true);
     } catch (err) {
       setError(err.response?.data?.error ?? 'Impossible de charger les congés approuvés.');
     } finally {
@@ -121,12 +123,14 @@ export default function LeaveTitles() {
   }
 
   return (
-    <div className="leave-titles-page">
+    <div className="leave-titles-page leave-dashboard">
       <Header />
-      <main className="leave-titles-main">
-        <section className="leave-titles-hero">
-          <h1>Création des titres de congé</h1>
+      <main className="container py-4 py-md-5 leave-titles-main">
+        <header className="mb-4">
+          <h1 className="h3 fw-bold mb-1">Création des titres de congé</h1>
           <p className="leave-titles-muted mb-0">Recherchez un employé pour retrouver ses congés approuvés et générer un titre par exercice.</p>
+        </header>
+        <section className="leave-titles-hero">
           <form className="leave-titles-search" onSubmit={searchRequests}>
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Matricule ou nom de l'employé" aria-label="Matricule ou nom" />
             <button className="leave-titles-btn primary" type="submit" disabled={loading}>{loading ? 'Recherche...' : 'Rechercher'}</button>
@@ -136,7 +140,9 @@ export default function LeaveTitles() {
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
         <section className="leave-titles-panel">
           <h2 className="h4 mb-3">Congés approuvés</h2>
-          {requests.length === 0 ? <p className="leave-titles-muted mb-0">Aucun congé approuvé à afficher.</p> : (
+          {loading ? <p className="leave-titles-muted mb-0">Recherche en cours…</p> : !hasSearched ? (
+            <p className="leave-titles-muted mb-0">Recherchez un employé pour afficher ses congés approuvés</p>
+          ) : requests.length === 0 ? <p className="leave-titles-muted mb-0">Aucun congé approuvé</p> : (
             <div className="leave-titles-table-wrap">
               <table className="leave-titles-table"><thead><tr><th>Matricule</th><th>Employé</th><th>Type</th><th>Période</th><th>Durée</th><th>Action</th></tr></thead>
                 <tbody>{requests.map((request) => <tr key={request.request_id}>

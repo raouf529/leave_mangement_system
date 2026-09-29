@@ -55,6 +55,16 @@
   font-weight: 600;
 }
 
+.inbox-employee-meta {
+  min-height: 1.25rem;
+  font-size: 0.8rem;
+}
+
+.inbox-table .cell-sub {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 /* ---------- Decision modal ---------- */
 .decision-backdrop {
   position: fixed;

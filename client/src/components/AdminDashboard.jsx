@@ -137,7 +137,7 @@ function ConfirmModal({ open, title, message, confirmLabel = 'Confirmer', danger
 /* ════════════════════════════════════════════════
    INPUT MODAL  (replaces prompt)
    ════════════════════════════════════════════════ */
-function InputModal({ open, title, fields, onConfirm, onCancel }) {
+function InputModal({ open, title, description, fields, onConfirm, onCancel }) {
   const [values, setValues] = useState({});
 
   useEffect(() => {
@@ -168,18 +168,32 @@ function InputModal({ open, title, fields, onConfirm, onCancel }) {
           </span>
           <h3 className="modal-dialog-title">{title}</h3>
         </div>
+        {description && <p className="modal-dialog-body">{description}</p>}
         <form onSubmit={handleSubmit} className="modal-dialog-form">
           {(fields || []).map((f) => (
             <div key={f.name} className="modal-form-group">
               <label className="modal-form-label">{f.label}</label>
-              <input
-                type={f.type || 'text'}
-                className="modal-form-input"
-                value={values[f.name] ?? ''}
-                onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
-                placeholder={f.placeholder ?? ''}
-                required={f.required !== false}
-              />
+              {f.type === 'select' ? (
+                <select
+                  className="modal-form-input"
+                  value={values[f.name] ?? ''}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                  required={f.required !== false}
+                >
+                  {(f.options || []).map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type={f.type || 'text'}
+                  className="modal-form-input"
+                  value={values[f.name] ?? ''}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.name]: e.target.value }))}
+                  placeholder={f.placeholder ?? ''}
+                  required={f.required !== false}
+                />
+              )}
             </div>
           ))}
           <div className="modal-dialog-actions">
@@ -456,6 +470,49 @@ export default function AdminDashboard() {
   };
 
   const [creatingExerciseFor, setCreatingExerciseFor] = useState(null);
+  const [transferringChefId, setTransferringChefId] = useState(null);
+
+  const handleTransferChefRole = async (chef) => {
+    const candidates = employees.filter((employee) =>
+      employee.roleValidation === 'employe'
+      && employee.unit?.type === chef.unit?.type
+      && Number(employee.unit?.id) === Number(chef.unit?.id)
+    );
+    if (candidates.length === 0) {
+      toast('Aucun employé disponible dans cette unité.', 'error');
+      return;
+    }
+
+    const selection = await openInput({
+      title: 'Transférer le rôle de chef',
+      description: `${chef.firstName} ${chef.lastName} deviendra employé. Les étapes de demande en attente qui lui sont attribuées seront transférées au remplaçant.`,
+      fields: [{
+        name: 'newEmployeeId',
+        label: 'Remplaçant dans la même unité',
+        type: 'select',
+        defaultValue: String(candidates[0].id),
+        options: candidates.map((candidate) => ({
+          value: String(candidate.id),
+          label: `${candidate.firstName} ${candidate.lastName}`
+        }))
+      }]
+    });
+    if (!selection?.newEmployeeId) return;
+
+    setTransferringChefId(chef.id);
+    try {
+      const result = await callAdmin('/transfer-chef-role', {
+        oldChefId: chef.id,
+        newEmployeeId: Number(selection.newEmployeeId)
+      });
+      toast(`Rôle transféré. ${result.reassignedSteps} étape(s) en attente réassignée(s).`, 'success');
+      await fetchEmployees();
+    } catch (error) {
+      toast(error.response?.data?.error || error.message, 'error');
+    } finally {
+      setTransferringChefId(null);
+    }
+  };
 
   const handleCreateCurrentExercise = async (emp) => {
     setCreatingExerciseFor(emp.id);
@@ -494,6 +551,14 @@ export default function AdminDashboard() {
       <AdminHeader />
 
       <main className="container py-4 py-md-5">
+        <header className="mb-4">
+          <h1 className="h3 fw-bold mb-1">{activeTab === 'employees' ? 'Gestion des employés' : 'Historique / Logs'}</h1>
+          <p className="text-secondary mb-0">
+            {activeTab === 'employees'
+              ? 'Gérez les employés, leurs exercices et leurs permissions.'
+              : 'Consultez les actions enregistrées dans le système.'}
+          </p>
+        </header>
         <div className="d-flex mb-4 gap-3">
           <button className={`btn ${activeTab === 'employees' ? 'btn-primary' : 'btn-outline-primary'}`} onClick={() => setActiveTab('employees')}>
             Employés
@@ -508,10 +573,6 @@ export default function AdminDashboard() {
             {/* Stats */}
             <div className="section-card p-4 mb-4">
               <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <div>
-                  <h2 className="h4 fw-bold mb-1">Gestion des employés</h2>
-                  <p className="muted-note mb-0">Gérez les exercices, rôles et permissions des employés</p>
-                </div>
                 <div className="stat-strip">
                   <div className="stat-block text-center">
                     <p className="stat-number mb-0">{employees.length}</p>

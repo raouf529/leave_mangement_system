@@ -136,6 +136,79 @@ const employServices = {
         } catch(error) {
             throw error;
         }
+    },
+    async transferChefRole(oldChefId, newEmployeeId, adminId) {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const [employees] = await connection.query(
+                `SELECT e.id, e.role_leave_validation, e.is_leave_responsible,
+                        e.service_id, COALESCE(e.departement_id, s.departement_id) AS resolved_departement_id,
+                        COALESCE(e.direction_id, dep.direction_id, s.direction_id) AS resolved_direction_id
+                 FROM Employe e
+                 LEFT JOIN Service s ON s.id = e.service_id
+                 LEFT JOIN Departement dep ON dep.id = COALESCE(e.departement_id, s.departement_id)
+                 WHERE e.id IN (?, ?)
+                 FOR UPDATE`,
+                [oldChefId, newEmployeeId]
+            );
+            const oldChef = employees.find((employee) => Number(employee.id) === Number(oldChefId));
+            const newEmployee = employees.find((employee) => Number(employee.id) === Number(newEmployeeId));
+
+            if (!oldChef || !newEmployee || Number(oldChefId) === Number(newEmployeeId)) {
+                throw new Error('Les deux employés sélectionnés doivent être différents et exister.');
+            }
+
+            const unitColumns = {
+                chef_service: 'service_id',
+                chef_departement: 'resolved_departement_id',
+                directeur: 'resolved_direction_id'
+            };
+            const unitColumn = unitColumns[oldChef.role_leave_validation];
+            if (!unitColumn) {
+                throw new Error('L’employé sélectionné ne détient pas un rôle de chef transférable.');
+            }
+            if (newEmployee.role_leave_validation !== 'employe' || Number(newEmployee.is_leave_responsible) === 1) {
+                throw new Error('Le remplaçant doit être un employé sans rôle RH.');
+            }
+            if (!oldChef[unitColumn] || Number(oldChef[unitColumn]) !== Number(newEmployee[unitColumn])) {
+                throw new Error('Le remplaçant doit appartenir à la même unité que le chef actuel.');
+            }
+
+            await connection.query(
+                `UPDATE Employe SET role_leave_validation = 'employe' WHERE id = ?`,
+                [oldChefId]
+            );
+            await connection.query(
+                'UPDATE Employe SET role_leave_validation = ? WHERE id = ?',
+                [oldChef.role_leave_validation, newEmployeeId]
+            );
+            const [stepResult] = await connection.query(
+                'UPDATE Request_step SET target_id = ? WHERE target_id = ? AND decision IS NULL',
+                [newEmployeeId, oldChefId]
+            );
+
+            await createLog(
+                adminId || oldChefId,
+                'TRANSFER_CHEF_ROLE',
+                `Transfert du rôle ${oldChef.role_leave_validation} de l’employé ${oldChefId} vers ${newEmployeeId}.`,
+                connection
+            );
+            await connection.commit();
+
+            return {
+                oldChefId: Number(oldChefId),
+                newEmployeeId: Number(newEmployeeId),
+                role: oldChef.role_leave_validation,
+                reassignedSteps: stepResult.affectedRows ?? 0
+            };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
     }
 };
 

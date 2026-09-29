@@ -1,4 +1,5 @@
 const adminServices = require('../services/adminServices');
+const employServices = require('../services/employServices');
 const backgroundService = require('../services/backgroundService');
 const requestService = require('../services/requestServices');
 
@@ -153,6 +154,22 @@ const adminController = {
                 return res.status(400).json({ error: 'empId is required' });
             }
             const result = await adminServices.assignDRH(Number(empId));
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
+    async transferChefRole(req, res) {
+        try {
+            const { oldChefId, newEmployeeId } = req.body;
+            if (!Number.isInteger(Number(oldChefId)) || !Number.isInteger(Number(newEmployeeId))) {
+                return res.status(400).json({ error: 'Les identifiants du chef actuel et du remplaçant sont requis.' });
+            }
+            const result = await employServices.transferChefRole(
+                Number(oldChefId),
+                Number(newEmployeeId),
+                req.user?.id
+            );
             res.status(200).json(result);
         } catch (error) {
             res.status(400).json({ error: error.message });

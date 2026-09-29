@@ -104,12 +104,14 @@ const profileService = {
             matricule: employee.matricule,
             firstName: employee.prenom,
             lastName: employee.nom,
+            maidenName: employee.nom_jeune_fille,
             email: rows[0].email,
+            jobTitle: employee.fonction,
             role: mapRole(employee.role_leave_validation, employee.is_leave_responsible),
             roleLabel: getRoleLabel(employee.role_leave_validation),
             recrutement_date: employee.date_entree,
             unit,
-            exercises: exercises.map(ex => ({ year: ex.year, balance: ex.balance })),
+            exercises: exercises.map(ex => ({ year: ex.year, exercise: ex.year, balance: ex.balance })),
             leaveRequests: leaveRequests.map(lr => {
                 const currentStep = currentStepByRequest[lr.request_id];
                 const rejectedStep = rejectedStepByRequest[lr.request_id];
@@ -128,6 +130,9 @@ const profileService = {
                     duration: lr.duration,
                     status: lr.request_status,
                     leaveType: lr.leave_type,
+                    reasonType: lr.leave_type === 'exceptional' ? lr.reason_type : null,
+                    justification: lr.leave_type === 'exceptional' ? lr.justification : null,
+                    justificationDocumentPath: lr.leave_type === 'exceptional' ? lr.url_justification : null,
                     createdByName: lr.creator_first_name && lr.creator_last_name
                         ? `${lr.creator_first_name} ${lr.creator_last_name}`
                         : null,
@@ -285,6 +290,7 @@ const profileService = {
             email: emp.email,
             role: mapRole(emp.role_leave_validation, emp.is_leave_responsible),
             roleLabel: getRoleLabel(emp.role_leave_validation),
+            roleValidation: emp.role_leave_validation,
             unit: getEmployeeUnit(emp),
             canCreateForEmployee: Boolean(emp.can_create_for_employee)
         }));
@@ -373,6 +379,10 @@ const profileService = {
             params.push(directionId);
         }
 
+        if (options.excludePrivileged) {
+            whereClauses.push("e.role_leave_validation NOT IN ('dg', 'admin')");
+        }
+
         const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
         const countQuery = `
@@ -415,6 +425,7 @@ const profileService = {
             email: emp.email,
             role: mapRole(emp.role_leave_validation, emp.is_leave_responsible),
             roleLabel: getRoleLabel(emp.role_leave_validation),
+            roleValidation: emp.role_leave_validation,
             unit: getEmployeeUnit(emp),
             canCreateForEmployee: Boolean(emp.can_create_for_employee)
         }));

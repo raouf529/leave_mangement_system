@@ -22,6 +22,11 @@ const LEAVE_TYPE_LABELS = {
   advance: 'Avance sur congé'
 };
 
+const REASON_TYPE_LABELS = {
+  medical: 'Médical',
+  family_event: 'Événement familial'
+};
+
 const ROLE_LABELS = {
   employe: 'Employé',
   chef_service: 'Chef de service',
@@ -38,10 +43,10 @@ const STATUS_LABELS = {
 };
 
 const STATUS_STYLES = {
-  pending: { bg: 'var(--amber-soft)', fg: 'var(--accent-amber)' },
-  approved: { bg: 'var(--success-soft)', fg: 'var(--success)' },
-  rejected: { bg: 'var(--danger-soft)', fg: 'var(--danger)' },
-  cancelled: { bg: 'var(--neutral-soft)', fg: 'var(--muted)' }
+  pending: { bg: '#fef3c7', fg: '#92400e' },
+  approved: { bg: '#dcfce7', fg: '#166534' },
+  rejected: { bg: '#fee2e2', fg: '#b91c1c' },
+  cancelled: { bg: '#e2e8f0', fg: '#475569' }
 };
 
 function formatDate(dateStr) {
@@ -81,8 +86,12 @@ function getEndDate(startDate, duration) {
 function getCurrentStepLabel(lr) {
   if (!lr?.currentStep) return null;
   if (lr.currentStep.kind === 'hr') return 'HR';
-  if (lr.currentStep.kind === 'unit') return `${lr.currentStep.unitName ?? 'Unité'} (${lr.currentStep.unitType ?? 'unit'})`;
+  if (lr.currentStep.kind === 'unit') return lr.currentStep.unitName ?? 'Unité';
   return lr.currentStep.targetName;
+}
+
+function getJustificationDocumentUrl(requestId) {
+  return `${api.defaults.baseURL}/request/${requestId}/document`;
 }
 
 function StatusBadge({ status }) {
@@ -227,27 +236,15 @@ function Dashboard() {
       />
 
       <main className="container py-4">
-        {/* Primary CTA lives right beside the page title on every breakpoint now —
-            previously it only appeared here on mobile (d-lg-none) and was otherwise
-            buried in the sidebar, which made it easy to miss. */}
-        <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <header className="mb-4">
           <div className="d-flex flex-wrap align-items-baseline gap-2 gap-md-3">
             <h1 className="page-title mb-0">
               Bonjour{employeeInfo ? `, ${employeeInfo.firstName}` : ''}
             </h1>
             <span className="hero-label">Espace employé</span>
           </div>
-          <button
-            className="btn btn-brand btn-request-main px-4"
-            onClick={() => setShowRequestModal(true)}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Demander un congé
-          </button>
-        </div>
+          <p className="text-secondary mb-0 mt-1">Consultez vos soldes et suivez vos demandes de congé.</p>
+        </header>
 
         {error && (
           <div className="alert alert-danger py-2 small" role="alert">
@@ -272,7 +269,7 @@ function Dashboard() {
                 style={{ '--status-color': STATUS_STYLES.pending.fg }}
               >
                 <p className="last-request-label mb-2">Demande en cours</p>
-                <div className="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+                <div className="d-flex flex-wrap align-items-center gap-2 mb-4">
                   <h2 className="section-title mb-0">{LEAVE_TYPE_LABELS[pendingRequest.leaveType] ?? pendingRequest.leaveType}</h2>
                   <StatusBadge status={pendingRequest.status} />
                 </div>
@@ -348,8 +345,8 @@ function Dashboard() {
                             {current && <span className="current-pill">Exercice en cours</span>}
                           </div>
                           <p className="exercise-balance mb-0">
-                            {exercise.balance}{' '}
-                            <span className="exercise-unit">/ {total} jours</span>
+                            {Number.isInteger(Number(exercise.balance)) ? Number(exercise.balance) : Number(exercise.balance).toFixed(1)}{' '}
+                            <span className="exercise-unit">restants / {Number.isInteger(total) ? total : total.toFixed(1)} jours</span>
                           </p>
                         </div>
                       </div>
@@ -367,10 +364,10 @@ function Dashboard() {
                 </h2>
                 <div className="d-flex flex-wrap gap-2 align-items-center">
                   <div className="form-check form-switch me-2 d-flex align-items-center gap-2" style={{ margin: 0 }}>
-                    <input className="form-check-input mt-0" type="checkbox" role="switch" id="activeLeaveSwitch" checked={filterActive} onChange={(e) => setFilterActive(e.target.checked)} />
+                    <input className="form-check-input mt-0" type="checkbox" role="switch" id="activeLeaveSwitch" aria-label="Afficher uniquement les congés actifs" checked={filterActive} onChange={(e) => setFilterActive(e.target.checked)} />
                     <label className="form-check-label small fw-medium" htmlFor="activeLeaveSwitch">Congés actifs</label>
                   </div>
-                  <input type="date" className="form-control filter-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} title="Date de début exacte" />
+                  <input type="date" lang="fr" className="form-control filter-input" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} title="Date de début exacte" aria-label="Filtrer par date de début" />
                   <select className="form-select filter-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                     <option value="all">Tous statuts</option>
                     <option value="pending">En attente</option>
@@ -403,7 +400,7 @@ function Dashboard() {
                         const annualSplit = lr.leaveType === 'annual' && lr.allocations?.length
                           ? lr.allocations.map((allocation) => `Exercice ${allocation.year} : ${allocation.daysAllocated} j`).join(' · ')
                           : null;
-                        const hasDetails = Boolean(annualSplit || (lr.status === 'pending' && currentStepLabel) || rejectionNote || lr.createdByName);
+                        const hasDetails = Boolean(lr.leaveType === 'exceptional' || annualSplit || (lr.status === 'pending' && currentStepLabel) || rejectionNote || lr.createdByName);
                         const isExpanded = expandedId === lr.id;
 
                         return (
@@ -458,6 +455,27 @@ function Dashboard() {
                                         <span className="detail-label">Répartition</span>
                                         <span className="detail-value">{annualSplit}</span>
                                       </div>
+                                    )}
+                                    {lr.leaveType === 'exceptional' && (
+                                      <>
+                                        <div className="detail-item">
+                                          <span className="detail-label">Type d’exception</span>
+                                          <span className="detail-value">{REASON_TYPE_LABELS[lr.reasonType] ?? lr.reasonType ?? '—'}</span>
+                                        </div>
+                                        <div className="detail-item">
+                                          <span className="detail-label">Justification</span>
+                                          <span className="detail-value">{lr.justification || '—'}</span>
+                                        </div>
+                                        {lr.justificationDocumentPath && (
+                                          <div className="detail-item">
+                                            <span className="detail-label">Document justificatif</span>
+                                            <span className="detail-value">{lr.justificationDocumentPath}</span>
+                                            <a href={getJustificationDocumentUrl(lr.id)} target="_blank" rel="noreferrer">
+                                              Ouvrir le document
+                                            </a>
+                                          </div>
+                                        )}
+                                      </>
                                     )}
                                     {lr.status === 'pending' && currentStepLabel && (
                                       <div className="detail-item">

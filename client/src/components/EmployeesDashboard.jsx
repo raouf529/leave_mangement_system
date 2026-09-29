@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
 import api from './api';
 import Header from './header';
 import LeaveRequestModal from './LeaveRequestModal';
 import useCurrentUser from '../hooks/useCurrentUser';
 import './EmployeesDashboard.css';
 
-function getUnitInformation() {
-  return api.get('/profile/me/underemployees');
+function getUnitInformation(companyWide) {
+  return api.get(companyWide ? '/profile/company-employees' : '/profile/me/underemployees');
 }
 
 function getEmployeeInformation(id) {
@@ -27,16 +27,21 @@ const STATUS_LABELS = {
 };
 
 const STATUS_STYLES = {
-  pending: { bg: 'var(--amber-soft)', fg: 'var(--accent-amber)' },
-  approved: { bg: 'var(--success-soft)', fg: 'var(--success)' },
-  rejected: { bg: 'var(--danger-soft)', fg: 'var(--danger)' },
-  cancelled: { bg: 'var(--neutral-soft)', fg: 'var(--muted)' }
+  pending: { bg: '#fef3c7', fg: '#92400e' },
+  approved: { bg: '#dcfce7', fg: '#166534' },
+  rejected: { bg: '#fee2e2', fg: '#b91c1c' },
+  cancelled: { bg: '#e2e8f0', fg: '#475569' }
 };
 
 const ROLE_LABELS = {
   head: 'Chef',
   hr: 'RH',
   employee: 'Employé'
+};
+
+const REASON_TYPE_LABELS = {
+  medical: 'Médical',
+  family_event: 'Événement familial'
 };
 
 const AVATAR_PALETTE = ['#1e40af', '#1d4ed8', '#059669', '#6366f1', '#dc2626', '#0284c7'];
@@ -90,7 +95,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function EmployeesDashboard() {
+function EmployeesDashboard({ companyWide = false }) {
   const [employees, setEmployees] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState('');
@@ -112,12 +117,12 @@ function EmployeesDashboard() {
   const [detailFilterStatus, setDetailFilterStatus] = useState('all');
   const [detailFilterStartDate, setDetailFilterStartDate] = useState('');
   const [detailFilterActive, setDetailFilterActive] = useState(false);
+  const [expandedRequestId, setExpandedRequestId] = useState(null);
 
   useEffect(() => {
     async function fetchList() {
       try {
-        const response = await getUnitInformation();
-        console.log('Fetched employees:', response.data);
+        const response = await getUnitInformation(companyWide);
         setEmployees(response.data ?? []);
       } catch (err) {
         console.error('Error fetching employees:', err);
@@ -131,13 +136,13 @@ function EmployeesDashboard() {
       return;
     }
 
-    if (currentRole === 'head' || currentRole === 'hr') {
+    if (companyWide ? currentRole === 'hr' : ['head', 'hr'].includes(currentRole)) {
       fetchList();
     } else {
       setLoadingList(false);
       setListError('Accès réservé aux responsables.');
     }
-  }, [currentRole, currentUserLoading]);
+  }, [companyWide, currentRole, currentUserLoading]);
 
   const filteredEmployees = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -232,7 +237,15 @@ function EmployeesDashboard() {
     <div className="leave-dashboard">
       <Header />
 
-      <main className="container-fluid px-3 px-md-4 py-4 py-md-5">
+      <main className="container py-4 py-md-5">
+        <header className="mb-4">
+          <h1 className="h3 fw-bold mb-1">{companyWide ? 'Tous les employés' : 'Mon équipe'}</h1>
+          <p className="text-secondary mb-0">
+            {companyWide
+              ? 'Consultez les informations et les demandes de congé des employés de l’entreprise.'
+              : 'Consultez les informations et les demandes de congé de votre équipe.'}
+          </p>
+        </header>
         {/* Liste des employés */}
         <div className="section-card section-pad mb-4">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
@@ -281,7 +294,6 @@ function EmployeesDashboard() {
                     <th>Email</th>
                     <th>Rôle</th>
                     <th>Unité</th>
-                    <th>Type d'unité</th>
                     <th></th>
                   </tr>
                 </thead>
@@ -298,7 +310,6 @@ function EmployeesDashboard() {
                       <td className="muted-note">{emp.email}</td>
                       <td><span className="role-chip">{emp.roleLabel ?? ROLE_LABELS[emp.role] ?? emp.role}</span></td>
                       <td>{emp.unit?.name ?? '—'}</td>
-                      <td>{emp.unit?.type ?? '—'}</td>
                       <td className="text-end text-nowrap">
                         {currentUser?.canCreateForEmployee && emp.role === 'employee' && (
                           <button
@@ -369,10 +380,6 @@ function EmployeesDashboard() {
                       <p className="fw-medium mb-0">{detail.unit?.name ?? '—'}</p>
                     </div>
                     <div className="col-12 col-sm-6 col-md-4">
-                      <p className="muted-note mb-1">Type d'unité</p>
-                      <p className="fw-medium mb-0">{detail.unit?.type ?? '—'}</p>
-                    </div>
-                    <div className="col-12 col-sm-6 col-md-4">
                       <p className="muted-note mb-1">Date de recrutement</p>
                       <p className="fw-medium mb-0">{formatDate(detail.recrutement_date)}</p>
                     </div>
@@ -389,7 +396,7 @@ function EmployeesDashboard() {
                             <p className="muted-note mb-1">Exercice</p>
                             <p className="fw-medium mb-3">{ex.exercise}</p>
                             <p className="muted-note mb-1">Solde</p>
-                            <p className="exercise-balance mb-0">{ex.balance} j</p>
+                            <p className="exercise-balance mb-0">{Number.isInteger(Number(ex.balance)) ? Number(ex.balance) : Number(ex.balance).toFixed(1)} j</p>
                           </div>
                         </div>
                       ))}
@@ -400,10 +407,10 @@ function EmployeesDashboard() {
                     <h3 className="section-title mb-0">Historique des demandes</h3>
                     <div className="d-flex flex-wrap gap-2 align-items-center">
                       <div className="form-check form-switch me-2 d-flex align-items-center gap-2" style={{ margin: 0 }}>
-                        <input className="form-check-input mt-0" type="checkbox" role="switch" id="empActiveLeaveSwitch" checked={detailFilterActive} onChange={(e) => setDetailFilterActive(e.target.checked)} />
+                        <input className="form-check-input mt-0" type="checkbox" role="switch" id="empActiveLeaveSwitch" aria-label="Afficher uniquement les congés actifs" checked={detailFilterActive} onChange={(e) => setDetailFilterActive(e.target.checked)} />
                         <label className="form-check-label small fw-medium" htmlFor="empActiveLeaveSwitch">Congés actifs</label>
                       </div>
-                      <input type="date" className="form-control filter-input" value={detailFilterStartDate} onChange={(e) => setDetailFilterStartDate(e.target.value)} title="Date de début exacte" />
+                      <input type="date" lang="fr" className="form-control filter-input" value={detailFilterStartDate} onChange={(e) => setDetailFilterStartDate(e.target.value)} title="Date de début exacte" aria-label="Filtrer par date de début" />
                       <select className="form-select filter-select" value={detailFilterStatus} onChange={(e) => setDetailFilterStatus(e.target.value)}>
                         <option value="all">Tous statuts</option>
                         <option value="pending">En attente</option>
@@ -425,21 +432,62 @@ function EmployeesDashboard() {
                             <th>Dates</th>
                             <th>Durée</th>
                             <th>Statut</th>
+                            <th></th>
                           </tr>
                         </thead>
                         <tbody>
                           {filteredLeaveRequests.map((lr) => {
                             const endDate = getEndDate(lr.startDate, lr.duration);
+                            const isExpanded = expandedRequestId === lr.id;
                             return (
-                              <tr key={lr.id}>
-                                <td>{LEAVE_TYPE_LABELS[lr.type] ?? lr.type}</td>
-                                <td>
-                                  {formatDate(lr.startDate)}
-                                  {endDate ? ` → ${formatDate(endDate)}` : ''}
-                                </td>
-                                <td>{lr.duration} j</td>
-                                <td><StatusBadge status={lr.status} /></td>
-                              </tr>
+                              <Fragment key={lr.id}>
+                                <tr>
+                                  <td>{LEAVE_TYPE_LABELS[lr.leaveType] ?? lr.leaveType}</td>
+                                  <td>
+                                    {formatDate(lr.startDate)}
+                                    {endDate ? ` → ${formatDate(endDate)}` : ''}
+                                  </td>
+                                  <td>{lr.duration} j</td>
+                                  <td><StatusBadge status={lr.status} /></td>
+                                  <td className="text-end">
+                                    {lr.leaveType === 'exceptional' && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm view-btn"
+                                        onClick={() => setExpandedRequestId(isExpanded ? null : lr.id)}
+                                        aria-expanded={isExpanded}
+                                      >
+                                        {isExpanded ? 'Masquer' : "Plus d'infos"}
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                                {isExpanded && lr.leaveType === 'exceptional' && (
+                                  <tr>
+                                    <td colSpan={5}>
+                                      <div className="detail-grid">
+                                        <div className="detail-item">
+                                          <span className="detail-label">Type d’exception</span>
+                                          <span className="detail-value">{REASON_TYPE_LABELS[lr.reasonType] ?? lr.reasonType ?? '—'}</span>
+                                        </div>
+                                        <div className="detail-item">
+                                          <span className="detail-label">Justification</span>
+                                          <span className="detail-value">{lr.justification || '—'}</span>
+                                        </div>
+                                        {lr.justificationDocumentPath && (
+                                          <div className="detail-item">
+                                            <span className="detail-label">Document justificatif</span>
+                                            <span className="detail-value">{lr.justificationDocumentPath}</span>
+                                            <a href={`${api.defaults.baseURL}/request/${lr.id}/document`} target="_blank" rel="noreferrer">
+                                              Ouvrir le document
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </Fragment>
                             );
                           })}
                         </tbody>

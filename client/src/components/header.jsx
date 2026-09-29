@@ -10,6 +10,8 @@ const LOGO_SRC = logo;
 const ICONS = {
   dashboard: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z',
   team: 'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  profile: 'M20 21a8 8 0 0 0-16 0M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z',
+  manual: 'M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z',
   inbox: 'M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z',
   admin: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
   titles: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8',
@@ -24,7 +26,7 @@ function NavIcon({ name }) {
   );
 }
 
-function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel, onRequestLeave, hideDashboard = false }) {
+function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel, onRequestLeave, hideDashboard = false, pendingInboxCount = 0 }) {
   const [openMenu, setOpenMenu] = useState(false);
   const [openNotifications, setOpenNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -99,15 +101,34 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel, onRequestLeave,
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  const navItems = [
-    { to: '/dashboard', label: 'Tableau de bord', icon: 'dashboard', show: !hideDashboard },
-    { to: '/unit-info', label: 'Mon équipe', icon: 'team', show: canSeeSupervisorLinks },
-    { to: '/approval-inbox', label: 'Boîte de réception', icon: 'inbox', show: canSeeSupervisorLinks },
-    { to: '/dg-inbox', label: 'Validation DG', icon: 'inbox', show: currentRole === 'dg' },
-    { to: '/admin', label: 'Administration', icon: 'admin', show: currentRole === 'admin' },
-    { to: '/leave-titles', label: 'Titres de congé', icon: 'titles', show: ['hr', 'drh', 'admin'].includes(currentRole) },
-    { to: '/add-employee', label: 'Ajouter un employé', icon: 'addUser', show: ['hr', 'drh'].includes(currentRole) }
-  ].filter((item) => item.show);
+  const navGroups = [
+    {
+      label: 'Mon espace',
+      items: [
+        { to: '/dashboard', label: 'Tableau de bord', icon: 'dashboard', show: !hideDashboard },
+        { to: '/profile', label: 'Mon profil', icon: 'profile', show: Boolean(currentRole) && currentRole !== 'admin' }
+      ]
+    },
+    {
+      label: 'Gestion',
+      items: [
+        { to: '/unit-info', label: 'Mon équipe', icon: 'team', show: canSeeSupervisorLinks },
+        { to: '/approval-inbox', label: 'Boîte de réception', icon: 'inbox', show: canSeeSupervisorLinks, showPendingCount: true },
+        { to: '/dg-inbox', label: 'Validation DG', icon: 'inbox', show: currentRole === 'dg', showPendingCount: true },
+        { to: '/admin', label: 'Administration', icon: 'admin', show: currentRole === 'admin' }
+      ]
+    },
+    {
+      label: 'RH',
+      items: [
+        { to: '/hr/employees', label: 'Tous les employés', icon: 'team', show: currentRole === 'hr' },
+        { to: '/hr/manual-leave', label: 'Saisie manuelle de congé', icon: 'manual', show: currentRole === 'hr' },
+        { to: '/leave-titles', label: 'Titres de congé', icon: 'titles', show: ['hr', 'drh', 'admin'].includes(currentRole) },
+        { to: '/add-employee', label: 'Ajouter un employé', icon: 'addUser', show: ['hr', 'drh'].includes(currentRole) }
+      ]
+    }
+  ].map((group) => ({ ...group, items: group.items.filter((item) => item.show) }))
+    .filter((group) => group.items.length > 0);
 
   const bellButton = (
     <button
@@ -180,16 +201,26 @@ function Header({ EmployeeName, EmployeeRole, EmployeeRoleLabel, onRequestLeave,
         )}
 
         <nav className="sidebar-nav" aria-label="Navigation principale">
-          {navItems.map((item) => (
-            <Link
-              key={item.to}
-              {...linkProps(item.to)}
-              to={item.to}
-              onClick={() => setOpenMenu(false)}
-            >
-              <NavIcon name={item.icon} />
-              <span>{item.label}</span>
-            </Link>
+          {navGroups.map((group) => (
+            <div className="d-flex flex-column gap-1" key={group.label}>
+              <div className="small text-uppercase text-secondary fw-semibold px-2 pt-3 pb-1">{group.label}</div>
+              {group.items.map((item) => (
+                <Link
+                  key={item.to}
+                  {...linkProps(item.to)}
+                  to={item.to}
+                  onClick={() => setOpenMenu(false)}
+                >
+                  <NavIcon name={item.icon} />
+                  <span>{item.label}</span>
+                  {item.showPendingCount && pendingInboxCount > 0 && (
+                    <span className="badge rounded-pill ms-auto" style={{ background: '#fef3c7', color: '#92400e' }}>
+                      {pendingInboxCount > 99 ? '99+' : pendingInboxCount}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
 

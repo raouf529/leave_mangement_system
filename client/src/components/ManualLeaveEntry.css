@@ -1,0 +1,160 @@
+.manual-leave-main {
+  max-width: 1040px;
+}
+
+.manual-leave-heading {
+  margin-bottom: 1.5rem;
+}
+
+.manual-leave-eyebrow {
+  margin-bottom: 0.3rem;
+  color: var(--primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.manual-leave-section {
+  margin-bottom: 1.25rem;
+  padding: 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgb(25 45 75 / 5%);
+}
+
+.manual-leave-section > .section-title {
+  margin-bottom: 1.1rem;
+}
+
+.manual-leave-lookup {
+  max-width: 620px;
+}
+
+.manual-leave-lookup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.manual-leave-lookup-row .btn,
+.manual-leave-actions .btn {
+  min-height: 42px;
+}
+
+.manual-employee-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.7fr);
+  gap: 1.5rem;
+  margin-top: 1.25rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border);
+}
+
+.manual-employee-details h3,
+.manual-exercise-balances h3 {
+  margin: 0 0 0.65rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.manual-employee-details p,
+.manual-exercise-balances p {
+  margin: 0.3rem 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.manual-exercise-balances {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+.manual-exercise-balances span {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.manual-leave-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.manual-leave-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.4rem;
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.manual-leave-field-wide {
+  grid-column: 1 / -1;
+}
+
+.manual-leave-duration {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  align-self: end;
+  min-height: 42px;
+  color: var(--muted);
+}
+
+.manual-leave-duration strong {
+  color: var(--primary);
+}
+
+.manual-leave-error,
+.manual-leave-success {
+  margin: 1rem 0 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 7px;
+  font-size: 0.9rem;
+}
+
+.manual-leave-error {
+  border: 1px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.manual-leave-success {
+  border: 1px solid var(--success);
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.manual-leave-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .manual-leave-section {
+    padding: 1rem;
+  }
+
+  .manual-leave-fields,
+  .manual-employee-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-leave-field-wide {
+    grid-column: auto;
+  }
+
+  .manual-leave-lookup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .manual-leave-lookup-row .btn {
+    width: 100%;
+  }
+}

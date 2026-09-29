@@ -1,0 +1,131 @@
+.employee-profile-page {
+  min-height: 100vh;
+  background: #f1f5fb;
+  color: #17243a;
+}
+
+.employee-profile-main {
+  width: min(100% - 2rem, 1080px);
+  margin: 0 auto;
+  padding: 2rem 0 4rem;
+}
+
+.employee-profile-heading {
+  margin-bottom: 1.5rem;
+}
+
+.employee-profile-eyebrow {
+  margin: 0 0 0.4rem;
+  color: #3158bb;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.employee-profile-heading h1 {
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.employee-profile-heading > p:last-child {
+  margin: 0.45rem 0 0;
+  color: #64748b;
+}
+
+.employee-profile-section {
+  overflow: hidden;
+  border: 1px solid #d7e0ed;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgb(25 45 75 / 5%);
+}
+
+.employee-profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.employee-profile-avatar {
+  display: grid;
+  width: 52px;
+  aspect-ratio: 1;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #2148b5;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.employee-profile-identity h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.employee-profile-identity p {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+}
+
+.employee-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  padding: 0.5rem 1.5rem;
+}
+
+.employee-profile-field {
+  min-width: 0;
+  padding: 1rem 0.75rem 1rem 0;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.employee-profile-field dt {
+  margin-bottom: 0.35rem;
+  color: #64748b;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.employee-profile-field dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #17243a;
+  font-size: 0.95rem;
+}
+
+.employee-profile-message {
+  padding: 1rem 1.25rem;
+  border: 1px solid #d7e0ed;
+  border-radius: 8px;
+  background: #fff;
+  color: #475569;
+}
+
+.employee-profile-message.is-error {
+  border-color: #fecaca;
+  color: #b42318;
+}
+
+@media (max-width: 600px) {
+  .employee-profile-main {
+    width: min(100% - 1.25rem, 1080px);
+    padding-top: 1.25rem;
+  }
+
+  .employee-profile-grid {
+    grid-template-columns: 1fr;
+    padding-inline: 1rem;
+  }
+
+  .employee-profile-identity {
+    padding: 1.25rem 1rem;
+  }
+}

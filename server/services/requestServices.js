@@ -520,6 +520,198 @@ function getRoleLabel(role) {
 }
 
 const requestService = {
+    async getEmployeeForManualRequest(matricule) {
+        const normalizedMatricule = String(matricule ?? '').trim();
+        if (!/^\d+$/.test(normalizedMatricule)) {
+            throw new Error('Saisissez un matricule numérique valide.');
+        }
+
+        const [employees] = await pool.query(
+            `SELECT e.id, e.matricule, e.nom, e.nom_jeune_fille, e.prenom, e.email,
+                    e.fonction, e.date_entree, e.role_leave_validation, e.is_leave_responsible,
+                    COALESCE(s.nom, dep.nom, d.nom) AS unit_name,
+                    CASE WHEN e.service_id IS NOT NULL THEN 'service'
+                         WHEN COALESCE(e.departement_id, s.departement_id) IS NOT NULL THEN 'department'
+                         ELSE 'direction' END AS unit_type
+             FROM Employe e
+             LEFT JOIN Service s ON s.id = e.service_id
+             LEFT JOIN Departement dep ON dep.id = COALESCE(e.departement_id, s.departement_id)
+             LEFT JOIN Direction d ON d.id = COALESCE(e.direction_id, dep.direction_id, s.direction_id)
+             WHERE e.matricule = ?`,
+            [normalizedMatricule]
+        );
+
+        if (employees.length === 0) {
+            throw new Error('Aucun employé ne correspond à ce matricule.');
+        }
+        if (employees.length > 1) {
+            throw new Error('Ce matricule est associé à plusieurs employés. Contactez l’administration.');
+        }
+
+        const employee = employees[0];
+        const [exercises] = await pool.query(
+            'SELECT year, balance FROM Exercise WHERE Emp_id = ? ORDER BY year DESC',
+            [employee.id]
+        );
+
+        return {
+            id: employee.id,
+            matricule: employee.matricule,
+            firstName: employee.prenom,
+            lastName: employee.nom,
+            maidenName: employee.nom_jeune_fille,
+            email: employee.email,
+            jobTitle: employee.fonction,
+            hireDate: employee.date_entree,
+            role: employee.is_leave_responsible ? 'hr' : employee.role_leave_validation,
+            unit: employee.unit_name ? { name: employee.unit_name, type: employee.unit_type } : null,
+            exercises: exercises.map((exercise) => ({ year: Number(exercise.year), balance: Number(exercise.balance) }))
+        };
+    },
+
+    async createManualLeaveRequest({ hrId, matricule, startDate, endDate, leaveType, reasonType, justification, url, status }) {
+        const normalizedMatricule = String(matricule ?? '').trim();
+        const normalizedReasonType = typeof reasonType === 'string' ? reasonType.trim() : '';
+        const normalizedJustification = typeof justification === 'string' ? justification.trim() : '';
+        const allowedLeaveTypes = ['annual', 'exceptional', 'advance'];
+
+        if (!/^\d+$/.test(normalizedMatricule)) {
+            throw new Error('Saisissez un matricule numérique valide.');
+        }
+        if (!['approved', 'rejected'].includes(status)) {
+            throw new Error('Le statut doit être approuvé ou refusé.');
+        }
+        if (!allowedLeaveTypes.includes(leaveType)) {
+            throw new Error('Le type de congé sélectionné est invalide.');
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate ?? '') || !/^\d{4}-\d{2}-\d{2}$/.test(endDate ?? '')) {
+            throw new Error('Les dates de début et de fin sont obligatoires et doivent être valides.');
+        }
+        for (const dateValue of [startDate, endDate]) {
+            const parsedDate = new Date(`${dateValue}T00:00:00Z`);
+            if (Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== dateValue) {
+                throw new Error('Les dates de début et de fin sont invalides.');
+            }
+        }
+        const duration = calculateLeaveDuration(startDate, endDate);
+        if (leaveType === 'exceptional' && (!normalizedReasonType || !normalizedJustification)) {
+            throw new Error('Le motif et la justification sont obligatoires pour un congé exceptionnel.');
+        }
+
+        const exerciseYear = getExerciseYearForDate(new Date(`${startDate}T12:00:00`));
+        const connection = await pool.getConnection();
+
+        try {
+            await connection.beginTransaction();
+            const [employeeRows] = await connection.query(
+                'SELECT id, matricule, nom, prenom FROM Employe WHERE matricule = ? FOR UPDATE',
+                [normalizedMatricule]
+            );
+            if (employeeRows.length === 0) {
+                throw new Error('Aucun employé ne correspond à ce matricule.');
+            }
+            if (employeeRows.length > 1) {
+                throw new Error('Ce matricule est associé à plusieurs employés. Contactez l’administration.');
+            }
+            const employee = employeeRows[0];
+            await connection.query(
+                `INSERT INTO Exercise (Emp_id, year, balance, created_at)
+                 VALUES (?, ?, 0, CURDATE())
+                 ON DUPLICATE KEY UPDATE exercise_id = exercise_id`,
+                [employee.id, exerciseYear]
+            );
+
+            if (status === 'approved') {
+                const [approvedRequests] = await connection.query(
+                    `SELECT start_date, duration FROM Leave_request
+                     WHERE Emp_id = ? AND request_status = 'approved' FOR UPDATE`,
+                    [employee.id]
+                );
+                const requestedStart = new Date(`${startDate}T00:00:00`);
+                const requestedEnd = new Date(`${endDate}T00:00:00`);
+                for (const existing of approvedRequests) {
+                    const existingStartValue = existing.start_date instanceof Date
+                        ? existing.start_date.toISOString().slice(0, 10)
+                        : String(existing.start_date).slice(0, 10);
+                    const existingStart = new Date(`${existingStartValue}T00:00:00`);
+                    const existingEnd = new Date(existingStart);
+                    existingEnd.setDate(existingEnd.getDate() + Number(existing.duration) - 1);
+                    if (requestedStart <= existingEnd && requestedEnd >= existingStart) {
+                        throw new Error('La période chevauche un congé déjà approuvé pour cet employé.');
+                    }
+                }
+            }
+
+            const [insertResult] = await connection.query(
+                `INSERT INTO Leave_request
+                    (Emp_id, created_by, exercise, leave_type, start_date, duration, reason_type,
+                     justification, url_justification, request_status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [employee.id, hrId, exerciseYear, leaveType, startDate, duration,
+                    normalizedReasonType || null, normalizedJustification || null, url || null, status]
+            );
+            const requestId = insertResult.insertId;
+
+            if (status === 'approved' && leaveType === 'annual') {
+                await connection.query('SELECT exercise_id FROM Exercise WHERE Emp_id = ? FOR UPDATE', [employee.id]);
+                await createAnnualExerciseRequest(requestId, connection);
+                await applyApprovedAnnualAllocations(requestId, connection);
+            } else if (status === 'approved' && leaveType === 'advance') {
+                const [exerciseRows] = await connection.query(
+                    'SELECT * FROM Exercise WHERE Emp_id = ? FOR UPDATE',
+                    [employee.id]
+                );
+                const priorBalances = exerciseRows.filter((exercise) =>
+                    Number(exercise.year) !== exerciseYear && Number(exercise.balance) > 0
+                );
+                if (priorBalances.length > 0) {
+                    throw new Error('Les soldes des exercices précédents doivent être utilisés avant une avance sur congé.');
+                }
+                const allocations = computeAdvanceExerciseSplit(duration, exerciseRows, exerciseYear);
+                for (const allocation of allocations) {
+                    await connection.query(
+                        `INSERT INTO Request_exercise_allocation
+                            (request_id, exercise_id, days_allocated, remaining_after)
+                         VALUES (?, ?, ?, ?)`,
+                        [requestId, allocation.exercise_id, allocation.days_allocated, allocation.remaining_after]
+                    );
+                }
+                await applyApprovedAdvanceAllocations(requestId, connection);
+            }
+
+            const statusLabel = status === 'approved' ? 'approuvée' : 'refusée';
+            const employeeName = `${employee.prenom} ${employee.nom}`;
+            const details = `Demande de congé ${leaveType} ${statusLabel} saisie manuellement pour ${employeeName} (matricule ${employee.matricule}), du ${startDate} au ${endDate}.`;
+            const notification = `Une demande de congé ${leaveType} du ${startDate} au ${endDate} a été saisie par les RH et ${statusLabel}.`;
+            await connection.query(
+                'INSERT INTO Logs (emp_id, action_type, details, action_timestamp) VALUES (?, ?, ?, NOW())',
+                [hrId, 'HR_MANUAL_REQUEST_CREATED', details]
+            );
+            await connection.query(
+                'INSERT INTO Notification (target_id, request_id, content) VALUES (?, ?, ?)',
+                [employee.id, requestId, notification]
+            );
+
+            const [updatedExercises] = await connection.query(
+                'SELECT year, balance FROM Exercise WHERE Emp_id = ? ORDER BY year DESC',
+                [employee.id]
+            );
+            await connection.commit();
+            return {
+                requestId,
+                employeeId: employee.id,
+                status,
+                duration,
+                exercises: updatedExercises.map((exercise) => ({ year: Number(exercise.year), balance: Number(exercise.balance) }))
+            };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    },
+
     async createRequest({ employeeId, targetEmployeeId, startDate, endDate, duration, leaveType, reasonType, justification, url, exercise }) {
         // create new Request
         const effectiveDuration = calculateLeaveDuration(startDate, endDate);

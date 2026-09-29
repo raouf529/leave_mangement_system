@@ -1,8 +1,8 @@
 :root {
   --ink: #1e293b;
-  --muted: #64748b;
+  --muted: #475569;
   --surface: #ffffff;
-  --canvas: #f0f4fa;
+  --canvas: #eff3fc;
   --border: #d1d9e6;
   --primary: #1e40af;
   --primary-hover: #1e3a8a;
@@ -39,7 +39,7 @@ body {
 
 .hero-label {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -117,7 +117,7 @@ body {
 }
 
 .detail-label {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--muted);
 }

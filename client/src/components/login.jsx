@@ -47,7 +47,7 @@ function Login() {
         try {
           const meRes = await api.get('/auth/me');
           role = meRes.data?.role;
-        } catch (err) {
+        } catch {
           // ignore
         }
       }
@@ -57,7 +57,7 @@ function Login() {
       } else {
         navigate('/dashboard');
       }
-    } catch (error) {
+    } catch {
       setError('Email ou mot de passe incorrect');
     } finally {
       setLoading(false);

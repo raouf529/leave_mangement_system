@@ -108,17 +108,6 @@
   white-space: nowrap;
 }
 
-/* The main "Demander un congé" CTA next to the page title, now visible on
-   every breakpoint (it used to be d-lg-none, so on desktop the only way to
-   find it was the sidebar). */
-.leave-dashboard .btn-request-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(30, 41, 59, 0.08);
-}
-
 .leave-dashboard .info-btn {
   border: 1px solid var(--border);
   background: var(--surface);
@@ -175,7 +164,7 @@
 }
 
 .history-table thead th {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -196,7 +185,7 @@
 }
 
 .cell-sub {
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   color: var(--muted);
 }
 

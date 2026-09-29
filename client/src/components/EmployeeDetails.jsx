@@ -50,10 +50,10 @@ function Toasts({ toasts }) {
 /* ── Status badge ── */
 function StatusBadge({ status }) {
   const map = {
-    approved:  { bg: 'var(--success-soft)', color: 'var(--success)', label: 'Approuvé' },
-    rejected:  { bg: 'var(--danger-soft)',  color: 'var(--danger)',  label: 'Refusé'   },
-    pending:   { bg: 'var(--amber-soft)',   color: 'var(--accent-amber)', label: 'En attente' },
-    cancelled: { bg: 'var(--neutral-soft)', color: 'var(--muted)', label: 'Annulé' },
+    approved:  { bg: '#dcfce7', color: '#166534', label: 'Approuvé' },
+    rejected:  { bg: '#fee2e2', color: '#b91c1c', label: 'Refusé' },
+    pending:   { bg: '#fef3c7', color: '#92400e', label: 'En attente' },
+    cancelled: { bg: '#e2e8f0', color: '#475569', label: 'Annulé' },
   };
   const s = map[status] || { bg: 'var(--neutral-soft)', color: 'var(--muted)', label: status };
   return (
@@ -180,10 +180,13 @@ export default function EmployeeDetails() {
           </svg>
           Retour
         </button>
-        <h1 className="emp-details-title">
-          Gestion de l'employé
-          <span className="emp-details-name-badge">{employee.firstName} {employee.lastName}</span>
-        </h1>
+        <div>
+          <h1 className="emp-details-title">
+            Gestion de l'employé
+            <span className="emp-details-name-badge">{employee.firstName} {employee.lastName}</span>
+          </h1>
+          <p className="text-secondary small mb-0 mt-1">Consultez le profil, les soldes et l’historique des demandes de cet employé.</p>
+        </div>
       </header>
 
       <main className="emp-details-main">
@@ -205,7 +208,7 @@ export default function EmployeeDetails() {
               {employee.unit?.name && (
                 <div className="emp-info-row">
                   <dt>Unité</dt>
-                  <dd>{employee.unit.name} <span style={{ color: 'var(--muted)', fontSize: '0.82rem' }}>({employee.unit.type})</span></dd>
+                  <dd>{employee.unit.name}</dd>
                 </div>
               )}
               {employee.recrutement_date && (
@@ -318,7 +321,7 @@ export default function EmployeeDetails() {
                             <span className="ex-year-label">{fiscalLabel(ex.year)}</span>
                             {isCurrent && <span className="current-ex-pill">Courant</span>}
                           </td>
-                          <td><span className="ex-balance-val">{Number(ex.balance).toFixed(1)}</span> <span className="muted-note" style={{ fontSize: '0.82rem' }}>j</span></td>
+                          <td><span className="ex-balance-val">{Number.isInteger(Number(ex.balance)) ? Number(ex.balance) : Number(ex.balance).toFixed(1)}</span> <span className="muted-note" style={{ fontSize: '0.82rem' }}>j</span></td>
                           <td className="muted-note">{ex.created_at ? new Date(ex.created_at).toLocaleDateString('fr-FR') : '—'}</td>
                           <td className="muted-note">{ex.updated_at ? new Date(ex.updated_at).toLocaleDateString('fr-FR') : '—'}</td>
                           <td>

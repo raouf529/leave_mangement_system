@@ -38,6 +38,9 @@ function uploadJustification(req, res, next) {
 	});
 }
 
+router.get('/hr/employee/:matricule', authenticateToken, authorizeRoles('hr'), requestController.getEmployeeForManualRequest);
+router.post('/hr/manual', authenticateToken, authorizeRoles('hr'), uploadJustification, requestController.createManualRequest);
+
 router.post('/', authenticateToken, uploadJustification, requestController.createRequest);
 router.get('/steps/me', authenticateToken, requestController.getMyPendingSteps);
 router.get('/steps/:targetId', authenticateToken, authorizeRequestTargetAccess, requestController.getRequestSteps);
