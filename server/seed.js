@@ -104,17 +104,32 @@ async function seedEmployees(conn, org) {
 
 async function seedExercise(conn, emp) {
   const exercises = {};
+  const employeeExerciseHistory = {
+    e1: { 2023: 6, 2024: 30, 2025: 30, 2026: 7.0 },
+    e2: { 2022: 4, 2023: 30, 2024: 30, 2025: 30, 2026: 7.0 },
+    e3: { 2023: 6, 2024: 30, 2025: 30, 2026: 7.0 },
+    e8: { 2024: 0, 2025: 0, 2026: 7.0 },
+  };
+
   for (const key of Object.keys(emp)) {
     if (key === 'e9') {
       exercises[key] = null;
       continue;
     }
-    const balances = key === 'e8' ? { 2024: 0, 2025: 0, 2026: 7.0 } :  { 2024: 5, 2025: 30, 2026: 7.0 };
-    const [r2024] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2024, balances[2024], '2024-07-01']);
-    const [r2025] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2025, balances[2025], '2025-07-01']);
-    const [r2026] = await conn.query('INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)', [emp[key], 2026, balances[2026], '2026-07-01']);
-    exercises[key] = { 2024: r2024.insertId, 2025: r2025.insertId, 2026: r2026.insertId };
+
+    const balances = employeeExerciseHistory[key] || { 2024: 5, 2025: 30, 2026: 7.0 };
+    const years = Object.keys(balances).map(Number).sort((a, b) => a - b);
+
+    exercises[key] = {};
+    for (const year of years) {
+      const [result] = await conn.query(
+        'INSERT INTO Exercise (Emp_id, year, balance, created_at) VALUES (?, ?, ?, ?)',
+        [emp[key], year, balances[year], `${year}-07-01`]
+      );
+      exercises[key][year] = result.insertId;
+    }
   }
+
   return exercises;
 }
 

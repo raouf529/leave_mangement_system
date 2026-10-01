@@ -1,5 +1,6 @@
 const pool = require('../db');
 const { assignBalance, getExerciseWindowForDate } = require('../utils/helpers');
+const { sendNotificationEmail } = require('./emailService');
 
 
 // Exercise.year = fiscal start year (Jul startYear – Jun startYear+1)
@@ -785,6 +786,9 @@ const adminServices = {
                 `INSERT INTO Notification (target_id, request_id, content) VALUES ?`,
                 [insertValues]
             );
+            for (const hr of hrRows) {
+                void sendNotificationEmail({ targetId: hr.id, requestId: null, content: notifContent });
+            }
         }
 
         return { success: true, action, year, balance };

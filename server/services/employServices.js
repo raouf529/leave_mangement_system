@@ -209,6 +209,92 @@ const employServices = {
         } finally {
             connection.release();
         }
+    },
+    async assignChefRole(employeeId, role, adminId) {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            const [employees] = await connection.query(
+                `SELECT e.id, e.role_leave_validation, e.is_leave_responsible,
+                        e.service_id, COALESCE(e.departement_id, s.departement_id) AS resolved_departement_id
+                 FROM Employe e
+                 LEFT JOIN Service s ON s.id = e.service_id
+                 WHERE e.id = ?
+                 FOR UPDATE`,
+                [employeeId]
+            );
+            const employee = employees[0];
+            if (!employee) throw new Error('Employé introuvable.');
+            if (employee.role_leave_validation !== 'employe' || Number(employee.is_leave_responsible) === 1) {
+                throw new Error('Seul un employé sans rôle RH peut être nommé chef.');
+            }
+
+            const unitColumns = {
+                chef_service: 'service_id',
+                chef_departement: 'resolved_departement_id'
+            };
+            const unitColumn = unitColumns[role];
+            if (!unitColumn) throw new Error('Le rôle de chef sélectionné est invalide.');
+
+            const unitId = employee[unitColumn];
+            if (!unitId) {
+                throw new Error('Cet employé n’appartient pas à une unité compatible avec le rôle sélectionné.');
+            }
+
+            const unitExpression = role === 'chef_service'
+                ? 'e.service_id'
+                : 'COALESCE(e.departement_id, s.departement_id)';
+            const [incumbents] = await connection.query(
+                `SELECT e.id
+                 FROM Employe e
+                 LEFT JOIN Service s ON s.id = e.service_id
+                 WHERE e.role_leave_validation = ? AND ${unitExpression} = ? AND e.id != ?
+                 FOR UPDATE`,
+                [role, unitId, employeeId]
+            );
+            const incumbent = incumbents[0];
+
+            if (incumbent) {
+                await connection.query(
+                    "UPDATE Employe SET role_leave_validation = 'employe' WHERE id = ?",
+                    [incumbent.id]
+                );
+            }
+            await connection.query(
+                'UPDATE Employe SET role_leave_validation = ? WHERE id = ?',
+                [role, employeeId]
+            );
+
+            let reassignedSteps = 0;
+            if (incumbent) {
+                const [stepResult] = await connection.query(
+                    'UPDATE Request_step SET target_id = ? WHERE target_id = ? AND decision IS NULL',
+                    [employeeId, incumbent.id]
+                );
+                reassignedSteps = stepResult.affectedRows ?? 0;
+            }
+
+            await createLog(
+                adminId || employeeId,
+                'ASSIGN_CHEF_ROLE',
+                `Attribution du rôle ${role} à l’employé ${employeeId}${incumbent ? ` en remplacement de ${incumbent.id}` : ''}.`,
+                connection
+            );
+            await connection.commit();
+
+            return {
+                employeeId: Number(employeeId),
+                role,
+                replacedChefId: incumbent ? Number(incumbent.id) : null,
+                reassignedSteps
+            };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
     }
 };
 

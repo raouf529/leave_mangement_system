@@ -358,6 +358,7 @@ function GlobalActions() {
 
 /* ─── Main Admin Dashboard ─── */
 export default function AdminDashboard() {
+  const { role: currentRole } = useCurrentUser();
   const [employees, setEmployees] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -471,6 +472,50 @@ export default function AdminDashboard() {
 
   const [creatingExerciseFor, setCreatingExerciseFor] = useState(null);
   const [transferringChefId, setTransferringChefId] = useState(null);
+  const [assigningChefId, setAssigningChefId] = useState(null);
+
+  const handleAssignChefRole = async (employee) => {
+    const roleOptions = [
+      ...(employee.unit?.type === 'service' ? [{ value: 'chef_service', label: 'Chef de service' }] : []),
+      ...(['service', 'department'].includes(employee.unit?.type)
+        ? [{ value: 'chef_departement', label: 'Chef de département' }]
+        : [])
+    ];
+    if (roleOptions.length === 0) {
+      toast('Cet employé doit être rattaché à un service ou un département.', 'error');
+      return;
+    }
+
+    const selection = await openInput({
+      title: 'Nommer un chef',
+      description: `Nommer ${employee.firstName} ${employee.lastName} dans son unité actuelle. Le chef en poste, s’il y en a un, sera remplacé.`,
+      fields: [{
+        name: 'role',
+        label: 'Fonction',
+        type: 'select',
+        defaultValue: roleOptions[0].value,
+        options: roleOptions
+      }]
+    });
+    if (!selection?.role) return;
+
+    setAssigningChefId(employee.id);
+    try {
+      const result = await callAdmin('/assign-chef-role', {
+        employeeId: employee.id,
+        role: selection.role
+      });
+      const replacementMessage = result.replacedChefId
+        ? ` Le chef précédent est remplacé et ${result.reassignedSteps} étape(s) en attente transférée(s).`
+        : '';
+      toast(`${employee.firstName} ${employee.lastName} nommé(e) ${ROLE_LABELS[result.role]}.${replacementMessage}`, 'success');
+      await fetchEmployees();
+    } catch (error) {
+      toast(error.response?.data?.error || error.message, 'error');
+    } finally {
+      setAssigningChefId(null);
+    }
+  };
 
   const handleTransferChefRole = async (chef) => {
     const candidates = employees.filter((employee) =>
@@ -543,6 +588,7 @@ export default function AdminDashboard() {
       <InputModal
         open={inputModal.open}
         title={inputModal.title}
+        description={inputModal.description}
         fields={inputModal.fields}
         onConfirm={inputModal.onConfirm}
         onCancel={inputModal.onCancel}
@@ -658,6 +704,16 @@ export default function AdminDashboard() {
                               >
                                 {emp.role === 'drh' ? 'Actuel DRH' : 'Assigner DRH'}
                               </button>
+
+                              {['admin', 'hr'].includes(currentRole) && emp.roleValidation === 'employe' && (
+                                <button
+                                  className="btn btn-sm btn-outline-primary"
+                                  onClick={() => handleAssignChefRole(emp)}
+                                  disabled={assigningChefId === emp.id}
+                                >
+                                  {assigningChefId === emp.id ? 'Nomination…' : 'Assigner chef'}
+                                </button>
+                              )}
 
                               <button
                                 className={`btn btn-sm ${emp.canCreateForEmployee ? 'btn-success' : 'btn-outline-secondary'}`}

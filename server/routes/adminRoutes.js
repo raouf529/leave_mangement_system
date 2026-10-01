@@ -16,6 +16,7 @@ router.post('/update-request-step-decision', authenticateToken, authorizeRoles('
 router.post('/trigger-monthly-job', authenticateToken, authorizeRoles('drh', 'hr', 'admin'), adminController.triggerMonthlyJob);
 router.post('/assign-create-others', authenticateToken, authorizeRoles('admin'), adminController.assignCreateForOthers);
 router.post('/assign-drh', authenticateToken, authorizeRoles('admin'), adminController.assignDRH);
+router.post('/assign-chef-role', authenticateToken, authorizeRoles('hr', 'admin'), adminController.assignChefRole);
 router.post('/transfer-chef-role', authenticateToken, authorizeRoles('hr', 'admin'), adminController.transferChefRole);
 router.post('/create-current-exercise-by-id', authenticateToken, authorizeRoles('hr', 'admin'), adminController.createCurrentExerciseForEmployee);
 router.post('/manage-exercise', authenticateToken, authorizeRoles('admin'), adminController.manageExercise);

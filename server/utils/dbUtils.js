@@ -2,6 +2,7 @@
  * Shared database query utilities and common data operations.
  */
 const pool = require('../db');
+const { sendNotificationEmail } = require('../services/emailService');
 
 async function createNotification({ targetId, requestId, content }, connection = null) {
     if (!targetId || !content) {
@@ -13,6 +14,9 @@ async function createNotification({ targetId, requestId, content }, connection =
         const values = [targetId, requestId || null, content, false, currentTimestamp];
         const runner = connection || pool;
         await runner.query(query, values);
+        if (!connection) {
+            void sendNotificationEmail({ targetId, requestId, content });
+        }
     } catch (err) {
         console.error('Error creating notification:', err.message);
     }

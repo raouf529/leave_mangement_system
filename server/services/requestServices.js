@@ -1,8 +1,10 @@
 const pool = require('../db');
+const fs = require('fs');
 const path = require('path');
 const AdmZip = require('adm-zip');
 const { getExerciseYearForDate, calculateLeaveDuration } = require('../utils/helpers');
 const { createNotification, createLog } = require('../utils/dbUtils');
+const { sendNotificationEmail } = require('./emailService');
 
 const CREATOR_ROLES = ['chef_service', 'chef_departement', 'directeur'];
 
@@ -697,6 +699,7 @@ const requestService = {
                 [employee.id]
             );
             await connection.commit();
+            void sendNotificationEmail({ targetId: employee.id, requestId, content: notification });
             return {
                 requestId,
                 employeeId: employee.id,
@@ -735,6 +738,7 @@ const requestService = {
 
         const exerciseYear = exercise ?? getExerciseYearForDate(startDate);
         const connection = await pool.getConnection();
+        let requestNotification = null;
 
         try {
             const [creatorRows] = await connection.query('SELECT * FROM Employe WHERE id = ?', [creatorId]);
@@ -846,16 +850,20 @@ const requestService = {
                 targetUnit = await forwardRequestToNextStep(result.insertId, employeeId, null, null, connection);
             }
             if (targetUnit && targetUnit.id) {
-                await createNotification({
+                requestNotification = {
                     targetId: targetUnit.id,
                     requestId: result.insertId,
                     content: isCreatingForEmployee
                         ? `Une demande de congé pour ${employeeRows[0].nom} ${employeeRows[0].prenom} vous attend pour approbation.`
                         : `${employeeRows[0].nom} ${employeeRows[0].prenom} vous a soumis une demande de congé du ${startDate} au ${endDate}.`
-                }, connection);
+                };
+                await createNotification(requestNotification, connection);
             }
             await createLog(creatorId, 'REQUEST_CREATED', `Demande de congé (${leaveType}) créée pour ${employeeRows[0].nom} ${employeeRows[0].prenom}, du ${startDate} pour ${effectiveDuration} jour(s).`, connection);
             await connection.commit();
+            if (requestNotification) {
+                void sendNotificationEmail(requestNotification);
+            }
             return result.insertId;
         } catch (error) {
             await connection.rollback();
@@ -1220,7 +1228,18 @@ const requestService = {
             throw new Error('Cet exercice n’est pas associé à la demande.');
         }
 
-        const templatePath = path.join(__dirname, '..', '..', 'Titre_de_conge (2).docx');
+        const templateCandidates = [
+            path.join(__dirname, '..', '..', 'Titre_de_conge (2).docx'),
+            path.join(__dirname, '..', 'Titre_de_conge (2).docx'),
+            path.join(__dirname, '..', '..', 'templates', 'Titre_de_conge (2).docx'),
+            path.join(__dirname, '..', 'templates', 'Titre_de_conge (2).docx'),
+        ];
+        const templatePath = templateCandidates.find((p) => fs.existsSync(p));
+
+        if (!templatePath) {
+            throw new Error('Le modèle de titre de congé est introuvable. Ajoutez le fichier "Titre_de_conge (2).docx" à la racine du projet ou dans un dossier templates.');
+        }
+
         const zip = new AdmZip(templatePath);
         const contentEntry = zip.getEntry('content.xml');
         if (!contentEntry) {

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, Fragment } from 'react';
 import api from './api';
 import Header from './header';
 import LeaveRequestModal from './LeaveRequestModal';
-import './theme.css';
+import './Theme.css';
 import './dashboard.css';
 // this page where employee information and can send leave request and see the status of leave request
 
@@ -184,11 +184,11 @@ function Dashboard() {
     .filter((ex) => !isCurrentExercise(ex.exercise))
     .reduce((sum, ex) => sum + Number(ex.balance || 0), 0);
   const rawRequests = employeeInfo?.leaveRequests ?? [];
-  // Sort from oldest to newest using created_at (or id as fallback)
+  // Sort from newest to oldest using created_at (or id as fallback)
   const leaveRequests = [...rawRequests].sort((a, b) => {
     const timeA = a.created_at ? new Date(a.created_at).getTime() : a.id;
     const timeB = b.created_at ? new Date(b.created_at).getTime() : b.id;
-    return timeA - timeB;
+    return timeB - timeA;
   });
 
   // The hero card only ever needs to surface a request that's still awaiting a

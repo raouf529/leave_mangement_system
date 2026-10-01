@@ -175,6 +175,22 @@ const adminController = {
             res.status(400).json({ error: error.message });
         }
     },
+    async assignChefRole(req, res) {
+        try {
+            const { employeeId, role } = req.body;
+            if (!Number.isInteger(Number(employeeId)) || !['chef_service', 'chef_departement'].includes(role)) {
+                return res.status(400).json({ error: 'Un employé et un rôle de chef valide sont requis.' });
+            }
+            const result = await employServices.assignChefRole(
+                Number(employeeId),
+                role,
+                req.user?.id
+            );
+            res.status(200).json(result);
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    },
     async createCurrentExerciseForEmployee(req, res) {
         try {
             const { empId } = req.body;

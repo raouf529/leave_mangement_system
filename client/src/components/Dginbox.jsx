@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from './api';
 import Header from './header';
 import useCurrentUser from '../hooks/useCurrentUser';
-import './theme.css';
+import './Theme.css';
 import './ApprovalInbox.css';
 
 function getMySteps() {

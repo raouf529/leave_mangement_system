@@ -36,7 +36,8 @@ const profileService = {
                     creator.role_leave_validation AS creator_role
              FROM Leave_request lr
              LEFT JOIN Employe creator ON creator.id = lr.created_by
-             WHERE lr.Emp_id = ?`,
+             WHERE lr.Emp_id = ?
+             ORDER BY lr.created_at DESC, lr.request_id DESC`,
             [employeeId]
         );
 
